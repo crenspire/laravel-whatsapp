@@ -29,9 +29,7 @@ class WhatsappServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-whatsapp')
             ->hasConfigFile('whatsapp')
-            ->hasRoute('web')
-            ->hasViews()
-            ->hasTranslations();
+            ->hasRoute('web');
     }
 
     /**
