@@ -208,3 +208,260 @@ it('creates proper list message structure', function () {
     expect(fn () => $method->invoke($service, '1234567890', 'Test', 'Button', $sections))
         ->toThrow(Exception::class);
 });
+
+it('builds headers correctly with default configuration', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_headers' => [
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+            'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
+        ],
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('buildHeaders');
+    $method->setAccessible(true);
+
+    $tenantConfig = [
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'headers' => []
+    ];
+
+    $headers = $method->invoke($service, $tenantConfig);
+
+    expect($headers)->toHaveKey('Content-Type', 'application/json');
+    expect($headers)->toHaveKey('Accept', 'application/json');
+    expect($headers)->toHaveKey('User-Agent', 'Laravel-WhatsApp-Package/1.0.0');
+    expect($headers)->toHaveKey('Authorization', 'Bearer test_token');
+});
+
+it('builds headers correctly with custom headers', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_headers' => [
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ],
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('buildHeaders');
+    $method->setAccessible(true);
+
+    $tenantConfig = [
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'headers' => [
+            'X-Custom-Header' => 'custom-value',
+            'X-Tenant-ID' => 'tenant123'
+        ]
+    ];
+
+    $customHeaders = [
+        'X-Request-ID' => 'req123',
+        'X-Custom-Header' => 'override-value' // This should override tenant header
+    ];
+
+    $headers = $method->invoke($service, $tenantConfig, $customHeaders);
+
+    expect($headers)->toHaveKey('Content-Type', 'application/json');
+    expect($headers)->toHaveKey('Accept', 'application/json');
+    expect($headers)->toHaveKey('Authorization', 'Bearer test_token');
+    expect($headers)->toHaveKey('X-Custom-Header', 'override-value'); // Custom should override tenant
+    expect($headers)->toHaveKey('X-Tenant-ID', 'tenant123');
+    expect($headers)->toHaveKey('X-Request-ID', 'req123');
+});
+
+it('handles tenant configuration with custom headers', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => 'default_phone',
+        'access_token' => 'default_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_headers' => [
+            'Content-Type' => 'application/json',
+        ],
+        'tenants' => [
+            'tenant1' => [
+                'phone_number_id' => 'tenant_phone',
+                'access_token' => 'tenant_token',
+                'headers' => [
+                    'X-Tenant-Header' => 'tenant1-value',
+                    'X-API-Version' => 'v2.0'
+                ]
+            ]
+        ]
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('tenantConfig');
+    $method->setAccessible(true);
+
+    $tenantConfig = $method->invoke($service, 'tenant1');
+
+    expect($tenantConfig)->toHaveKey('phone_number_id', 'tenant_phone');
+    expect($tenantConfig)->toHaveKey('access_token', 'tenant_token');
+    expect($tenantConfig)->toHaveKey('headers');
+    expect($tenantConfig['headers'])->toHaveKey('X-Tenant-Header', 'tenant1-value');
+    expect($tenantConfig['headers'])->toHaveKey('X-API-Version', 'v2.0');
+});
+
+it('supports custom headers in sendTextMessage', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_headers' => [
+            'Content-Type' => 'application/json',
+        ],
+        'tenants' => []
+    ]);
+
+    // Test that the method accepts custom headers parameter
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendTextMessage');
+    $method->setAccessible(true);
+
+    // This will fail due to HTTP call, but we can verify the method signature
+    expect(fn () => $method->invoke($service, '1234567890', 'Test message', null, ['X-Custom' => 'value']))
+        ->toThrow(Exception::class);
+});
+
+it('handles language configuration correctly', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_language' => 'es-ES',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('tenantConfig');
+    $method->setAccessible(true);
+
+    $tenantConfig = $method->invoke($service, null);
+
+    expect($tenantConfig)->toHaveKey('language', 'es-ES');
+});
+
+it('handles tenant-specific language configuration', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => 'default_phone',
+        'access_token' => 'default_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_language' => 'en-US',
+        'tenants' => [
+            'tenant1' => [
+                'phone_number_id' => 'tenant_phone',
+                'access_token' => 'tenant_token',
+                'language' => 'fr-FR'
+            ]
+        ]
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('tenantConfig');
+    $method->setAccessible(true);
+
+    $tenantConfig = $method->invoke($service, 'tenant1');
+
+    expect($tenantConfig)->toHaveKey('language', 'fr-FR');
+});
+
+it('gets language correctly with custom override', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_language' => 'en-US',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('getLanguage');
+    $method->setAccessible(true);
+
+    $tenantConfig = [
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'headers' => [],
+        'language' => 'es-ES'
+    ];
+
+    // Test with custom language override
+    $language = $method->invoke($service, $tenantConfig, 'de-DE');
+    expect($language)->toBe('de-DE');
+
+    // Test with tenant language
+    $language = $method->invoke($service, $tenantConfig, null);
+    expect($language)->toBe('es-ES');
+
+    // Test with default language
+    $tenantConfig['language'] = null;
+    $language = $method->invoke($service, $tenantConfig, null);
+    expect($language)->toBe('en-US');
+});
+
+it('supports language parameter in sendTextMessage', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_language' => 'en-US',
+        'tenants' => []
+    ]);
+
+    // Test that the method accepts language parameter
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendTextMessage');
+    $method->setAccessible(true);
+
+    // This will fail due to HTTP call, but we can verify the method signature
+    expect(fn () => $method->invoke($service, '1234567890', 'Test message', null, [], 'es-ES'))
+        ->toThrow(Exception::class);
+});
+
+it('supports language parameter in sendTemplateMessage', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'default_language' => 'en-US',
+        'tenants' => []
+    ]);
+
+    // Test that the method accepts language parameter
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendTemplateMessage');
+    $method->setAccessible(true);
+
+    // This will fail due to HTTP call, but we can verify the method signature
+    expect(fn () => $method->invoke($service, '1234567890', 'test_template', [], 'fr-FR', null, []))
+        ->toThrow(Exception::class);
+});

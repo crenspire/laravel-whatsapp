@@ -333,6 +333,78 @@ WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
 
 All phone numbers are validated before sending messages to ensure they meet WhatsApp's requirements.
 
+## 🔧 Custom Headers Support
+
+The package now supports custom headers for all API requests, allowing you to add authentication, tracking, or other custom headers:
+
+### Basic Usage
+
+```php
+// Using custom headers with individual requests
+$customHeaders = [
+    'X-Request-ID' => 'req_12345',
+    'X-Client-Version' => '2.0.0',
+    'X-Custom-Auth' => 'custom_token'
+];
+
+Whatsapp::sendTextMessage('+1234567890', 'Hello!', null, $customHeaders);
+
+// Using custom headers with media upload
+Whatsapp::uploadMedia('/path/to/file.jpg', 'image', null, $customHeaders);
+
+// Using custom headers with media download
+$filePath = Whatsapp::downloadMedia('media_id_123', null, $customHeaders);
+```
+
+### Multi-tenant Headers
+
+Configure per-tenant headers in your configuration:
+
+```php
+// config/whatsapp.php
+'tenants' => [
+    'tenant1' => [
+        'phone_number_id' => '123456789',
+        'access_token' => 'token1',
+        'headers' => [
+            'X-Tenant-ID' => 'tenant1',
+            'X-API-Version' => 'v2.0',
+            'X-Custom-Header' => 'tenant1-value'
+        ]
+    ],
+    'tenant2' => [
+        'phone_number_id' => '987654321',
+        'access_token' => 'token2',
+        'headers' => [
+            'X-Tenant-ID' => 'tenant2',
+            'X-API-Version' => 'v1.5'
+        ]
+    ]
+]
+```
+
+### Default Headers
+
+Set default headers for all requests:
+
+```php
+// config/whatsapp.php
+'default_headers' => [
+    'Content-Type' => 'application/json',
+    'Accept' => 'application/json',
+    'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
+    'X-Client-Name' => 'MyApp',
+    'X-Client-Version' => '1.0.0'
+],
+```
+
+### Header Priority
+
+Headers are merged in the following order (later overrides earlier):
+1. Default headers from configuration
+2. Tenant-specific headers
+3. Custom headers passed to individual methods
+
 ## Configuration Reference
 
 See [Configuration](docs/configuration.md) for detailed configuration options.

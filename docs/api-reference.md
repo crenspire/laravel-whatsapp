@@ -18,7 +18,7 @@ Creates a new WhatsappService instance with the provided configuration.
 ### sendMessage
 
 ```php
-public function sendMessage(string $to, array $message, ?string $tenantId = null): array
+public function sendMessage(string $to, array $message, ?string $tenantId = null, array $customHeaders = []): array
 ```
 
 Sends a WhatsApp message using the raw message format.
@@ -27,6 +27,7 @@ Sends a WhatsApp message using the raw message format.
 - `$to` (string): Recipient phone number
 - `$message` (array): Message payload
 - `$tenantId` (string|null): Optional tenant ID for multi-tenant setups
+- `$customHeaders` (array): Optional custom headers for this request
 
 **Returns:** array - API response
 
@@ -43,7 +44,7 @@ $response = $service->sendMessage('1234567890', [
 ### sendTextMessage
 
 ```php
-public function sendTextMessage(string $to, string $text, ?string $tenantId = null): array
+public function sendTextMessage(string $to, string $text, ?string $tenantId = null, array $customHeaders = []): array
 ```
 
 Sends a text message.
@@ -52,6 +53,7 @@ Sends a text message.
 - `$to` (string): Recipient phone number
 - `$text` (string): Message text
 - `$tenantId` (string|null): Optional tenant ID
+- `$customHeaders` (array): Optional custom headers for this request
 
 **Returns:** array - API response
 
@@ -63,7 +65,7 @@ $response = $service->sendTextMessage('1234567890', 'Hello World!');
 ### sendMediaMessage
 
 ```php
-public function sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null): array
+public function sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null, array $customHeaders = []): array
 ```
 
 Sends a media message (image, video, document, audio).
@@ -74,6 +76,7 @@ Sends a media message (image, video, document, audio).
 - `$type` (string): Media type ('image', 'video', 'document', 'audio')
 - `$caption` (string|null): Optional caption
 - `$tenantId` (string|null): Optional tenant ID
+- `$customHeaders` (array): Optional custom headers for this request
 
 **Returns:** array - API response
 

@@ -12,9 +12,24 @@ return [
 
     'webhook_secret' => env('WHATSAPP_WEBHOOK_SECRET'),
 
+    // Default headers for all requests
+    'default_headers' => [
+        'Content-Type' => 'application/json',
+        'Accept' => 'application/json',
+        'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
+    ],
+
+    // Default language for messages (ISO 639-1 format)
+    'default_language' => env('WHATSAPP_DEFAULT_LANGUAGE', 'en-US'),
+
     // Per-tenant routing
     'tenants' => [
-        // 'tenant_id' => ['phone_number_id' => '...', 'access_token' => '...'],
+        // 'tenant_id' => [
+        //     'phone_number_id' => '...', 
+        //     'access_token' => '...',
+        //     'headers' => ['Custom-Header' => 'value'], // Optional custom headers per tenant
+        //     'language' => 'es-ES' // Optional language override per tenant
+        // ],
     ],
 
     // Rate limit per minute

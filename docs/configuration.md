@@ -31,6 +31,9 @@ WHATSAPP_RATE_LIMIT=30
 
 # Enable debug logging (default: false)
 WHATSAPP_DEBUG=false
+
+# Custom headers (JSON format, optional)
+WHATSAPP_DEFAULT_HEADERS={"X-Client-Name":"MyApp","X-Client-Version":"1.0.0"}
 ```
 
 ## Configuration File
@@ -72,6 +75,13 @@ return [
 
     // Debug mode
     'debug' => env('WHATSAPP_DEBUG', false),
+
+    // Default headers for all requests
+    'default_headers' => [
+        'Content-Type' => 'application/json',
+        'Accept' => 'application/json',
+        'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
+    ],
 ];
 ```
 
@@ -83,11 +93,19 @@ For applications serving multiple clients, you can configure different WhatsApp 
 'tenants' => [
     'client1' => [
         'phone_number_id' => '123456789012345',
-        'access_token' => 'EAABwzLixnjYBO...'
+        'access_token' => 'EAABwzLixnjYBO...',
+        'headers' => [
+            'X-Tenant-ID' => 'client1',
+            'X-API-Version' => 'v2.0',
+        ],
     ],
     'client2' => [
         'phone_number_id' => '987654321098765',
-        'access_token' => 'EAABwzLixnjYBO...'
+        'access_token' => 'EAABwzLixnjYBO...',
+        'headers' => [
+            'X-Tenant-ID' => 'client2',
+            'X-API-Version' => 'v1.5',
+        ],
     ],
     'client3' => [
         'phone_number_id' => '555666777888999',
@@ -167,6 +185,59 @@ Configure these URLs in your WhatsApp Business API settings:
 
 - **Verification URL**: `https://yourdomain.com/whatsapp/webhook`
 - **Webhook URL**: `https://yourdomain.com/whatsapp/webhook`
+
+## Header Configuration
+
+### Default Headers
+
+Set default headers that will be included in all API requests:
+
+```php
+'default_headers' => [
+    'Content-Type' => 'application/json',
+    'Accept' => 'application/json',
+    'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
+    'X-Client-Name' => 'MyApp',
+    'X-Client-Version' => '1.0.0',
+],
+```
+
+### Per-tenant Headers
+
+Configure custom headers for specific tenants:
+
+```php
+'tenants' => [
+    'tenant1' => [
+        'phone_number_id' => '123456789',
+        'access_token' => 'token1',
+        'headers' => [
+            'X-Tenant-ID' => 'tenant1',
+            'X-API-Version' => 'v2.0',
+            'X-Custom-Header' => 'tenant1-value'
+        ]
+    ],
+],
+```
+
+### Header Priority
+
+Headers are merged in the following order (later overrides earlier):
+1. Default headers from configuration
+2. Tenant-specific headers
+3. Custom headers passed to individual methods
+
+### Using Custom Headers in Code
+
+```php
+// Pass custom headers to individual requests
+$customHeaders = [
+    'X-Request-ID' => 'req_12345',
+    'X-Client-Version' => '2.0.0'
+];
+
+Whatsapp::sendTextMessage('+1234567890', 'Hello!', null, $customHeaders);
+```
 
 ## Environment-specific Configuration
 

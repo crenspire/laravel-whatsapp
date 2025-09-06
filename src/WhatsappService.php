@@ -54,13 +54,56 @@ class WhatsappService
     protected function tenantConfig(?string $tenantId = null): array
     {
         if ($tenantId && isset($this->config['tenants'][$tenantId])) {
-            return $this->config['tenants'][$tenantId];
+            $tenant = $this->config['tenants'][$tenantId];
+            return [
+                'phone_number_id' => $tenant['phone_number_id'],
+                'access_token' => $tenant['access_token'],
+                'headers' => $tenant['headers'] ?? [],
+                'language' => $tenant['language'] ?? $this->config['default_language'] ?? 'en-US',
+            ];
         }
 
         return [
             'phone_number_id' => $this->config['phone_number_id'],
             'access_token'    => $this->config['access_token'],
+            'headers' => [],
+            'language' => $this->config['default_language'] ?? 'en-US',
         ];
+    }
+
+    /**
+     * Build headers for HTTP requests
+     *
+     * @param array $tenantConfig The tenant configuration
+     * @param array $customHeaders Custom headers to merge
+     * @return array The merged headers array
+     */
+    protected function buildHeaders(array $tenantConfig, array $customHeaders = []): array
+    {
+        $headers = array_merge(
+            $this->config['default_headers'] ?? [],
+            $tenantConfig['headers'] ?? [],
+            $customHeaders
+        );
+
+        // Ensure Authorization header is set if access token is available
+        if (!empty($tenantConfig['access_token'])) {
+            $headers['Authorization'] = 'Bearer ' . $tenantConfig['access_token'];
+        }
+
+        return $headers;
+    }
+
+    /**
+     * Get language for a request
+     *
+     * @param array $tenantConfig The tenant configuration
+     * @param string|null $customLanguage Custom language override
+     * @return string The language code
+     */
+    protected function getLanguage(array $tenantConfig, ?string $customLanguage = null): string
+    {
+        return $customLanguage ?? $tenantConfig['language'] ?? $this->config['default_language'] ?? 'en-US';
     }
 
     /**
@@ -72,10 +115,12 @@ class WhatsappService
      * @param string $to The recipient phone number (with country code)
      * @param array $message The message payload array
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @param array $customHeaders Optional custom headers for this request
+     * @param string|null $language Optional language override (ISO 639-1 format)
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendMessage(string $to, array $message, ?string $tenantId = null): array
+    public function sendMessage(string $to, array $message, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
         $this->validatePhoneNumber($to);
 
@@ -96,7 +141,9 @@ class WhatsappService
             'message_type' => $message['type'] ?? 'unknown'
         ]);
 
-        $response = Http::withToken($tenant['access_token'])
+        $headers = $this->buildHeaders($tenant, $customHeaders);
+        
+        $response = Http::withHeaders($headers)
                         ->timeout(30)
                         ->post($url, $payload);
 
@@ -131,12 +178,12 @@ class WhatsappService
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendTextMessage(string $to, string $text, ?string $tenantId = null): array
+    public function sendTextMessage(string $to, string $text, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
         return $this->sendMessage($to, [
             'type' => 'text',
             'text' => ['body' => $text]
-        ], $tenantId);
+        ], $tenantId, $customHeaders, $language);
     }
 
     /**
@@ -150,7 +197,7 @@ class WhatsappService
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null): array
+    public function sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
         $message = [
             'type' => $type,
@@ -163,7 +210,7 @@ class WhatsappService
             $message[$type]['caption'] = $caption;
         }
 
-        return $this->sendMessage($to, $message, $tenantId);
+        return $this->sendMessage($to, $message, $tenantId, $customHeaders, $language);
     }
 
     /**
@@ -177,8 +224,11 @@ class WhatsappService
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendTemplateMessage(string $to, string $templateName, array $parameters = [], ?string $language = 'en_US', ?string $tenantId = null): array
+    public function sendTemplateMessage(string $to, string $templateName, array $parameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = []): array
     {
+        $tenant = $this->tenantConfig($tenantId);
+        $language = $this->getLanguage($tenant, $language);
+        
         $components = [];
 
         if (!empty($parameters)) {
@@ -195,7 +245,7 @@ class WhatsappService
                 'language' => ['code' => $language],
                 'components' => $components
             ]
-        ], $tenantId);
+        ], $tenantId, $customHeaders, $language);
     }
 
     /**
@@ -207,12 +257,12 @@ class WhatsappService
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendInteractiveMessage(string $to, array $interactive, ?string $tenantId = null): array
+    public function sendInteractiveMessage(string $to, array $interactive, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
         return $this->sendMessage($to, [
             'type' => 'interactive',
             'interactive' => $interactive
-        ], $tenantId);
+        ], $tenantId, $customHeaders, $language);
     }
 
     /**
@@ -227,7 +277,7 @@ class WhatsappService
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendButtonMessage(string $to, string $bodyText, array $buttons, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null): array
+    public function sendButtonMessage(string $to, string $bodyText, array $buttons, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
         $interactive = [
             'type' => 'button',
@@ -253,7 +303,7 @@ class WhatsappService
             $interactive['footer'] = ['text' => $footerText];
         }
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
     }
 
     /**
@@ -269,7 +319,7 @@ class WhatsappService
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendListMessage(string $to, string $bodyText, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null): array
+    public function sendListMessage(string $to, string $bodyText, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
         $interactive = [
             'type' => 'list',
@@ -288,7 +338,7 @@ class WhatsappService
             $interactive['footer'] = ['text' => $footerText];
         }
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
     }
 
     /**
@@ -300,7 +350,7 @@ class WhatsappService
      * @return array The API response data containing media ID
      * @throws WhatsappException When file not found or upload fails
      */
-    public function uploadMedia(string $filePath, string $type, ?string $tenantId = null): array
+    public function uploadMedia(string $filePath, string $type, ?string $tenantId = null, array $customHeaders = []): array
     {
         $tenant = $this->tenantConfig($tenantId);
 
@@ -310,7 +360,9 @@ class WhatsappService
 
         $url = "{$this->config['base_uri']}/{$tenant['phone_number_id']}/media";
 
-        $response = Http::withToken($tenant['access_token'])
+        $headers = $this->buildHeaders($tenant, $customHeaders);
+        
+        $response = Http::withHeaders($headers)
                         ->attach('file', file_get_contents($filePath), basename($filePath))
                         ->post($url, [
                             'messaging_product' => 'whatsapp',
@@ -332,12 +384,14 @@ class WhatsappService
      * @return string The local file path where media was saved
      * @throws WhatsappException When media download fails
      */
-    public function downloadMedia(string $mediaId, ?string $tenantId = null): string
+    public function downloadMedia(string $mediaId, ?string $tenantId = null, array $customHeaders = []): string
     {
         $tenant = $this->tenantConfig($tenantId);
 
         $mediaUrl = "{$this->config['base_uri']}/{$mediaId}";
-        $response = Http::withToken($tenant['access_token'])->get($mediaUrl);
+        $headers = $this->buildHeaders($tenant, $customHeaders);
+        
+        $response = Http::withHeaders($headers)->get($mediaUrl);
 
         if ($response->failed()) {
             throw new WhatsappException("Failed to fetch media URL");
@@ -348,7 +402,7 @@ class WhatsappService
         $mimeType = $data['mime_type'] ?? 'application/octet-stream';
         $fileExtension = $this->getFileExtensionFromMimeType($mimeType);
 
-        $binary = Http::withToken($tenant['access_token'])->get($url)->body();
+        $binary = Http::withHeaders($headers)->get($url)->body();
 
         $filename = "{$mediaId}.{$fileExtension}";
         $path = $this->config['media_storage'] . "/{$filename}";
