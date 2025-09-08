@@ -465,3 +465,275 @@ it('supports language parameter in sendTemplateMessage', function () {
     expect(fn () => $method->invoke($service, '1234567890', 'test_template', [], 'fr-FR', null, []))
         ->toThrow(Exception::class);
 });
+
+it('creates proper contact message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $contacts = [
+        [
+            'name' => [
+                'formatted_name' => 'John Doe',
+                'first_name' => 'John',
+                'last_name' => 'Doe'
+            ],
+            'phones' => [
+                [
+                    'phone' => '+1234567890',
+                    'type' => 'WORK'
+                ]
+            ]
+        ]
+    ];
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendContactMessage');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, '1234567890', $contacts))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper location message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendLocationMessage');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, '1234567890', 40.7128, -74.0060, 'New York', 'New York, NY'))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper sticker message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendStickerMessage');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, '1234567890', 'sticker_id_123'))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper reaction message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendReactionMessage');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, '1234567890', 'message_id_123', '👍'))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper flow message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendFlowMessage');
+    $method->setAccessible(true);
+
+    $flowActionPayload = ['screen' => 'SCREEN_NAME'];
+    
+    expect(fn () => $method->invoke($service, '1234567890', 'flow_token', 'flow_id', 'Click here', 'navigate', $flowActionPayload))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper single product message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendSingleProductMessage');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, '1234567890', 'catalog_id', 'product_retailer_id', 'Check this out!'))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper multi-product message structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $sections = [
+        [
+            'title' => 'Products',
+            'product_items' => [
+                [
+                    'product_retailer_id' => 'product_1'
+                ]
+            ]
+        ]
+    ];
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendMultiProductMessage');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, '1234567890', 'catalog_id', 'Browse Products', $sections))
+        ->toThrow(Exception::class);
+});
+
+it('creates proper template message with components structure', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('sendTemplateMessageWithComponents');
+    $method->setAccessible(true);
+
+    $bodyParameters = [['type' => 'text', 'text' => 'Hello']];
+    $headerParameters = [['type' => 'text', 'text' => 'Header']];
+    $footerParameters = [['type' => 'text', 'text' => 'Footer']];
+
+    expect(fn () => $method->invoke($service, '1234567890', 'template_name', $bodyParameters, $headerParameters, $footerParameters))
+        ->toThrow(Exception::class);
+});
+
+it('handles media info retrieval', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('getMediaInfo');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, 'media_id_123'))
+        ->toThrow(Exception::class);
+});
+
+it('handles media deletion', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('deleteMedia');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, 'media_id_123'))
+        ->toThrow(Exception::class);
+});
+
+it('handles business profile retrieval', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('getBusinessProfile');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service))
+        ->toThrow(Exception::class);
+});
+
+it('handles business profile update', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $profileData = [
+        'messaging_product' => 'whatsapp',
+        'about' => 'Test business'
+    ];
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('updateBusinessProfile');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, $profileData))
+        ->toThrow(Exception::class);
+});
+
+it('handles mark message as read', function () {
+    $service = new WhatsappService([
+        'phone_number_id' => '123456789',
+        'access_token' => 'test_token',
+        'base_uri' => 'https://graph.facebook.com/v20.0',
+        'rate_limit' => 30,
+        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'tenants' => []
+    ]);
+
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('markMessageAsRead');
+    $method->setAccessible(true);
+
+    expect(fn () => $method->invoke($service, 'message_id_123'))
+        ->toThrow(Exception::class);
+});

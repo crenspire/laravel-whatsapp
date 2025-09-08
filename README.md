@@ -13,15 +13,18 @@ A comprehensive Laravel package for integrating with the WhatsApp Business Cloud
 
 ## Features
 
-- ✅ **Complete Message Types**: Text, media, templates, interactive messages (buttons, lists)
-- ✅ **Webhook Support**: Secure webhook handling with signature verification
-- ✅ **Media Management**: Upload and download media files with automatic type detection
+- ✅ **Complete Message Types**: Text, media, templates, interactive messages (buttons, lists), contacts, location, stickers, reactions, flows, and product messages
+- ✅ **Fluent API**: Builder patterns for easy message construction with `MessageBuilder` and `TemplateBuilder`
+- ✅ **Webhook Support**: Secure webhook handling with signature verification and comprehensive message type processing
+- ✅ **Media Management**: Upload, download, info retrieval, and deletion with automatic type detection via `MediaManager`
+- ✅ **Business Profile Management**: Get and update business profile information via `BusinessProfileManager`
 - ✅ **Multi-tenant Support**: Per-tenant configuration for phone numbers and access tokens
 - ✅ **Rate Limiting**: Built-in rate limiting to respect WhatsApp API limits
 - ✅ **Event System**: Laravel events for message status updates and incoming messages
 - ✅ **Comprehensive Testing**: Full test coverage with realistic scenarios
 - ✅ **Security**: Webhook verification and signature validation
 - ✅ **Logging**: Detailed logging for debugging and monitoring
+- ✅ **Clean Architecture**: Separated concerns with dedicated managers and builders
 
 ## Installation
 
@@ -412,6 +415,58 @@ See [Configuration](docs/configuration.md) for detailed configuration options.
 ## API Reference
 
 See [API Reference](docs/api-reference.md) for complete method documentation.
+
+## Enhanced Features
+
+### New Message Types
+
+The package now supports all WhatsApp Cloud API message types:
+
+- **Contact Messages**: Send contact cards
+- **Location Messages**: Share location with optional name and address
+- **Sticker Messages**: Send stickers
+- **Reaction Messages**: React to existing messages
+- **Flow Messages**: Send interactive flows
+- **Product Messages**: Single and multi-product catalogs
+
+### Fluent API
+
+Use the new builder patterns for cleaner code:
+
+```php
+// Template builder
+$template = Whatsapp::template('welcome_template', 'en_US')
+    ->header([['type' => 'text', 'text' => 'Welcome!']])
+    ->body([['type' => 'text', 'text' => 'Hello {{1}}!']])
+    ->footer([['type' => 'text', 'text' => 'Thank you']])
+    ->build();
+
+// Message builder
+$message = Whatsapp::message()::text('Hello with preview!', true);
+```
+
+### Business Profile Management
+
+```php
+// Get business profile
+$profile = Whatsapp::getBusinessProfile();
+
+// Update business profile
+Whatsapp::updateBusinessProfile([
+    'messaging_product' => 'whatsapp',
+    'about' => 'Updated business description'
+]);
+```
+
+### Enhanced Media Management
+
+```php
+// Get media information
+$info = Whatsapp::getMediaInfo('media_id_123');
+
+// Delete media
+Whatsapp::deleteMedia('media_id_123');
+```
 
 ## Examples
 

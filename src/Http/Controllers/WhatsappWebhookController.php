@@ -173,6 +173,11 @@ class WhatsappWebhookController extends Controller
             $type = $message['type'] ?? 'unknown';
 
             if (!$messageId || !$from) {
+                Log::warning('WhatsApp message missing required fields', [
+                    'message_id' => $messageId,
+                    'from' => $from,
+                    'message' => $message
+                ]);
                 continue;
             }
 
@@ -180,10 +185,193 @@ class WhatsappWebhookController extends Controller
                 'message_id' => $messageId,
                 'from' => $from,
                 'type' => $type,
-                'timestamp' => $timestamp
+                'timestamp' => $timestamp,
+                'context' => $message['context'] ?? null
             ]);
+
+            // Handle different message types
+            $this->processMessageByType($message, $type);
 
             event(new MessageReceived($messageId, $from, $message, \Carbon\Carbon::createFromTimestamp($timestamp)));
         }
+    }
+
+    /**
+     * Process message based on its type
+     * 
+     * @param array $message The message data
+     * @param string $type The message type
+     * @return void
+     */
+    protected function processMessageByType(array $message, string $type): void
+    {
+        switch ($type) {
+            case 'text':
+                $this->handleTextMessage($message);
+                break;
+            case 'image':
+            case 'video':
+            case 'audio':
+            case 'document':
+            case 'sticker':
+                $this->handleMediaMessage($message);
+                break;
+            case 'location':
+                $this->handleLocationMessage($message);
+                break;
+            case 'contacts':
+                $this->handleContactMessage($message);
+                break;
+            case 'interactive':
+                $this->handleInteractiveMessage($message);
+                break;
+            case 'reaction':
+                $this->handleReactionMessage($message);
+                break;
+            case 'system':
+                $this->handleSystemMessage($message);
+                break;
+            default:
+                Log::info('Unknown message type received', [
+                    'type' => $type,
+                    'message_id' => $message['id'] ?? null
+                ]);
+        }
+    }
+
+    /**
+     * Handle text messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleTextMessage(array $message): void
+    {
+        $text = $message['text']['body'] ?? '';
+        Log::info('Text message received', [
+            'message_id' => $message['id'] ?? null,
+            'text_length' => strlen($text),
+            'preview_url' => $message['text']['preview_url'] ?? false
+        ]);
+    }
+
+    /**
+     * Handle media messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleMediaMessage(array $message): void
+    {
+        $mediaType = $message['type'] ?? 'unknown';
+        $mediaId = $message[$mediaType]['id'] ?? null;
+        $mimeType = $message[$mediaType]['mime_type'] ?? null;
+        $sha256 = $message[$mediaType]['sha256'] ?? null;
+
+        Log::info('Media message received', [
+            'message_id' => $message['id'] ?? null,
+            'media_type' => $mediaType,
+            'media_id' => $mediaId,
+            'mime_type' => $mimeType,
+            'sha256' => $sha256
+        ]);
+    }
+
+    /**
+     * Handle location messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleLocationMessage(array $message): void
+    {
+        $location = $message['location'] ?? [];
+        $latitude = $location['latitude'] ?? null;
+        $longitude = $location['longitude'] ?? null;
+        $name = $location['name'] ?? null;
+        $address = $location['address'] ?? null;
+
+        Log::info('Location message received', [
+            'message_id' => $message['id'] ?? null,
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'name' => $name,
+            'address' => $address
+        ]);
+    }
+
+    /**
+     * Handle contact messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleContactMessage(array $message): void
+    {
+        $contacts = $message['contacts'] ?? [];
+        
+        Log::info('Contact message received', [
+            'message_id' => $message['id'] ?? null,
+            'contact_count' => count($contacts)
+        ]);
+    }
+
+    /**
+     * Handle interactive messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleInteractiveMessage(array $message): void
+    {
+        $interactive = $message['interactive'] ?? [];
+        $type = $interactive['type'] ?? 'unknown';
+        $buttonReply = $interactive['button_reply'] ?? null;
+        $listReply = $interactive['list_reply'] ?? null;
+
+        Log::info('Interactive message received', [
+            'message_id' => $message['id'] ?? null,
+            'interactive_type' => $type,
+            'button_reply' => $buttonReply,
+            'list_reply' => $listReply
+        ]);
+    }
+
+    /**
+     * Handle reaction messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleReactionMessage(array $message): void
+    {
+        $reaction = $message['reaction'] ?? [];
+        $messageId = $reaction['message_id'] ?? null;
+        $emoji = $reaction['emoji'] ?? null;
+
+        Log::info('Reaction message received', [
+            'message_id' => $message['id'] ?? null,
+            'reacted_to_message_id' => $messageId,
+            'emoji' => $emoji
+        ]);
+    }
+
+    /**
+     * Handle system messages
+     * 
+     * @param array $message The message data
+     * @return void
+     */
+    protected function handleSystemMessage(array $message): void
+    {
+        $system = $message['system'] ?? [];
+        $body = $system['body'] ?? null;
+        $type = $system['type'] ?? null;
+
+        Log::info('System message received', [
+            'message_id' => $message['id'] ?? null,
+            'system_type' => $type,
+            'body' => $body
+        ]);
     }
 }
