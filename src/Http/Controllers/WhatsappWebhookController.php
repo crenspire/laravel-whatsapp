@@ -2,6 +2,8 @@
 
 namespace Crenspire\Whatsapp\Http\Controllers;
 
+use Crenspire\Whatsapp\Events\MessageDeliveryFailed;
+use Crenspire\Whatsapp\Events\MessageFailed;
 use Crenspire\Whatsapp\Facades\Whatsapp;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -149,6 +151,9 @@ class WhatsappWebhookController extends Controller
                         $recipient,
                         \Carbon\Carbon::createFromTimestamp($timestamp)
                     ));
+                    break;
+                case 'failed':
+                    event(new MessageDeliveryFailed($messageId, $recipient, $status['errors'] ?? []));
                     break;
             }
         }
