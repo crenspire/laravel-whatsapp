@@ -4,6 +4,7 @@ namespace Crenspire\Whatsapp\Http\Controllers;
 
 use Crenspire\Whatsapp\Events\MessageDeliveryFailed;
 use Crenspire\Whatsapp\Events\MessageFailed;
+use Crenspire\Whatsapp\Events\TemplateStatusUpdated;
 use Crenspire\Whatsapp\Facades\Whatsapp;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -77,6 +78,11 @@ class WhatsappWebhookController extends Controller
 
         Whatsapp::createDebugLog('WhatsApp webhook received', ['data' => $data]);
 
+        // Handle template status updates
+        if (isset($data['entry'][0]['changes'][0]['value']['message_template_id']) && isset($data['entry'][0]['changes'][0]['value']['event'])) {
+            $this->handleTemplateStatusUpdates($data['entry'][0]['changes'][0]);
+        }
+
         // Handle message status updates
         if (isset($data['entry'][0]['changes'][0]['value']['statuses'])) {
             $this->handleStatusUpdates($data['entry'][0]['changes'][0]['value']['statuses']);
@@ -112,6 +118,20 @@ class WhatsappWebhookController extends Controller
         $expectedSignature = 'sha256=' . hash_hmac('sha256', $payload, $secret);
         
         return hash_equals($expectedSignature, $signature);
+    }
+
+    protected function handleTemplateStatusUpdates(array $changes): void
+    {
+        $templateId = $changes['value']['message_template_id'];
+        $event = $changes['value']['event'];
+
+        Whatsapp::createDebugLog('WhatsApp message status update', [
+            'template_id' => $templateId,
+            'event' => $event,
+            'changes' => $changes
+        ]);
+
+        event(new TemplateStatusUpdated($templateId, $event, $changes));
     }
 
     /**
