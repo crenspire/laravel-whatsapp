@@ -63,6 +63,28 @@ class WhatsappService
         }
     }
 
+    public function debugEnabled(): bool
+    {
+        return $this->config['debug'] ?? false;
+    }
+
+    public function createDebugLog(string $message, array $context = [], string $level = 'info'): void
+    {
+        if ($this->debugEnabled()) {
+            switch ($level) {
+                case 'info':
+                    Log::info($message, $context);
+                    break;
+                case 'warning':
+                    Log::warning($message, $context);
+                    break;
+                case 'error':
+                    Log::error($message, $context);
+                    break;
+            }
+        }
+    }
+
     /**
      * Get tenant-specific configuration or default configuration
      *
@@ -153,7 +175,7 @@ class WhatsappService
 
         $payload = array_merge(['messaging_product' => 'whatsapp', 'to' => $to], $message);
 
-        Log::info('Sending WhatsApp message', [
+        $this->createDebugLog('Sending WhatsApp message', [
             'to' => $to,
             'tenant' => $tenantId,
             'message_type' => $message['type'] ?? 'unknown'
@@ -167,11 +189,11 @@ class WhatsappService
 
         if ($response->failed()) {
             $errorData = $response->json();
-            Log::error('WhatsApp message failed', [
+            $this->createDebugLog('WhatsApp message failed', [
                 'to' => $to,
                 'status' => $response->status(),
                 'error' => $errorData
-            ]);
+            ], 'error');
 
             event(new MessageFailed($to, $errorData));
             throw new WhatsappException(

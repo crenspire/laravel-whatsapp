@@ -2,6 +2,7 @@
 
 namespace Crenspire\Whatsapp\Http\Controllers;
 
+use Crenspire\Whatsapp\Facades\Whatsapp;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
@@ -38,15 +39,15 @@ class WhatsappWebhookController extends Controller
         $challenge = $request->query('hub_challenge');
 
         if ($mode === 'subscribe' && $token === config('whatsapp.webhook_verify_token')) {
-            Log::info('WhatsApp webhook verified successfully');
+            Whatsapp::createDebugLog('WhatsApp webhook verified successfully');
             return response($challenge, 200);
         }
 
-        Log::warning('WhatsApp webhook verification failed', [
+        Whatsapp::createDebugLog('WhatsApp webhook verification failed', [
             'mode' => $mode,
             'token_provided' => $token !== null,
             'expected_token' => config('whatsapp.webhook_verify_token')
-        ]);
+        ], 'warning');
 
         return response('Forbidden', 403);
     }
@@ -65,16 +66,14 @@ class WhatsappWebhookController extends Controller
         // Verify webhook signature if configured
         if (config('whatsapp.webhook_secret')) {
             if (!$this->verifySignature($request)) {
-                Log::warning('WhatsApp webhook signature verification failed');
+                Whatsapp::createDebugLog('WhatsApp webhook signature verification failed', level: 'warning');
                 return response('Unauthorized', 401);
             }
         }
 
         $data = $request->all();
-        
-        Log::info('WhatsApp webhook received', [
-            'data' => $data
-        ]);
+
+        Whatsapp::createDebugLog('WhatsApp webhook received', ['data' => $data]);
 
         // Handle message status updates
         if (isset($data['entry'][0]['changes'][0]['value']['statuses'])) {
@@ -133,7 +132,7 @@ class WhatsappWebhookController extends Controller
                 continue;
             }
 
-            Log::info('WhatsApp message status update', [
+            Whatsapp::createDebugLog('WhatsApp message status update', [
                 'message_id' => $messageId,
                 'recipient' => $recipient,
                 'status' => $statusType
@@ -173,15 +172,15 @@ class WhatsappWebhookController extends Controller
             $type = $message['type'] ?? 'unknown';
 
             if (!$messageId || !$from) {
-                Log::warning('WhatsApp message missing required fields', [
+                Whatsapp::createDebugLog('WhatsApp message missing required fields', [
                     'message_id' => $messageId,
                     'from' => $from,
                     'message' => $message
-                ]);
+                ], 'warning');
                 continue;
             }
 
-            Log::info('WhatsApp incoming message', [
+            Whatsapp::createDebugLog('WhatsApp incoming message', [
                 'message_id' => $messageId,
                 'from' => $from,
                 'type' => $type,
@@ -232,7 +231,7 @@ class WhatsappWebhookController extends Controller
                 $this->handleSystemMessage($message);
                 break;
             default:
-                Log::info('Unknown message type received', [
+                Whatsapp::createDebugLog('Unknown message type received', [
                     'type' => $type,
                     'message_id' => $message['id'] ?? null
                 ]);
@@ -248,7 +247,7 @@ class WhatsappWebhookController extends Controller
     protected function handleTextMessage(array $message): void
     {
         $text = $message['text']['body'] ?? '';
-        Log::info('Text message received', [
+        Whatsapp::createDebugLog('Text message received', [
             'message_id' => $message['id'] ?? null,
             'text_length' => strlen($text),
             'preview_url' => $message['text']['preview_url'] ?? false
@@ -268,7 +267,7 @@ class WhatsappWebhookController extends Controller
         $mimeType = $message[$mediaType]['mime_type'] ?? null;
         $sha256 = $message[$mediaType]['sha256'] ?? null;
 
-        Log::info('Media message received', [
+        Whatsapp::createDebugLog('Media message received', [
             'message_id' => $message['id'] ?? null,
             'media_type' => $mediaType,
             'media_id' => $mediaId,
@@ -291,7 +290,7 @@ class WhatsappWebhookController extends Controller
         $name = $location['name'] ?? null;
         $address = $location['address'] ?? null;
 
-        Log::info('Location message received', [
+        Whatsapp::createDebugLog('Location message received', [
             'message_id' => $message['id'] ?? null,
             'latitude' => $latitude,
             'longitude' => $longitude,
@@ -310,7 +309,7 @@ class WhatsappWebhookController extends Controller
     {
         $contacts = $message['contacts'] ?? [];
         
-        Log::info('Contact message received', [
+        Whatsapp::createDebugLog('Contact message received', [
             'message_id' => $message['id'] ?? null,
             'contact_count' => count($contacts)
         ]);
@@ -329,7 +328,7 @@ class WhatsappWebhookController extends Controller
         $buttonReply = $interactive['button_reply'] ?? null;
         $listReply = $interactive['list_reply'] ?? null;
 
-        Log::info('Interactive message received', [
+        Whatsapp::createDebugLog('Interactive message received', [
             'message_id' => $message['id'] ?? null,
             'interactive_type' => $type,
             'button_reply' => $buttonReply,
@@ -349,7 +348,7 @@ class WhatsappWebhookController extends Controller
         $messageId = $reaction['message_id'] ?? null;
         $emoji = $reaction['emoji'] ?? null;
 
-        Log::info('Reaction message received', [
+        Whatsapp::createDebugLog('Reaction message received', [
             'message_id' => $message['id'] ?? null,
             'reacted_to_message_id' => $messageId,
             'emoji' => $emoji
@@ -368,7 +367,7 @@ class WhatsappWebhookController extends Controller
         $body = $system['body'] ?? null;
         $type = $system['type'] ?? null;
 
-        Log::info('System message received', [
+        Whatsapp::createDebugLog('System message received', [
             'message_id' => $message['id'] ?? null,
             'system_type' => $type,
             'body' => $body
