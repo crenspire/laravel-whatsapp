@@ -7,10 +7,14 @@ use Crenspire\Whatsapp\Events\MessageDelivered;
 use Crenspire\Whatsapp\Events\MessageFailed;
 use Crenspire\Whatsapp\Events\MessageRead;
 use Crenspire\Whatsapp\Events\MessageReceived;
+use Crenspire\Whatsapp\Events\MessageStatusUpdated;
+use Crenspire\Whatsapp\Events\TemplateQualityUpdated;
+use Crenspire\Whatsapp\Events\TemplateStatusUpdated;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -99,12 +103,26 @@ class WhatsappWebhookController extends Controller
             foreach ($entry['changes'] ?? [] as $change) {
                 $value = $change['value'] ?? [];
 
+                if (($change['field'] ?? null) === 'message_template_status_update') {
+                    $this->handleTemplateStatusUpdate($value, $entry['id'] ?? null);
+
+                    continue;
+                }
+
+                if (($change['field'] ?? null) === 'message_template_quality_update') {
+                    $this->handleTemplateQualityUpdate($value, $entry['id'] ?? null);
+
+                    continue;
+                }
+
+                $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+
                 if (isset($value['statuses']) && is_array($value['statuses'])) {
-                    $this->handleStatusUpdates($value['statuses']);
+                    $this->handleStatusUpdates($value['statuses'], $phoneNumberId);
                 }
 
                 if (isset($value['messages']) && is_array($value['messages'])) {
-                    $this->handleIncomingMessages($value['messages']);
+                    $this->handleIncomingMessages($value['messages'], $phoneNumberId, $value['contacts'] ?? []);
                 }
             }
         }
@@ -143,17 +161,25 @@ class WhatsappWebhookController extends Controller
      * and dispatches appropriate events.
      *
      * @param  array  $statuses  Array of status update data
+     * @param  string|null  $phoneNumberId  The phone number ID the messages were sent from
      */
-    protected function handleStatusUpdates(array $statuses): void
+    protected function handleStatusUpdates(array $statuses, ?string $phoneNumberId = null): void
     {
         foreach ($statuses as $status) {
             $messageId = $status['id'] ?? null;
-            $recipient = $status['recipient_id'] ?? null;
+            // Users with a username may only be identified by their business-scoped user ID
+            $recipient = $status['recipient_id'] ?? $status['recipient_user_id'] ?? null;
             $statusType = $status['status'] ?? null;
 
             if (! $messageId || ! $recipient || ! $statusType) {
                 continue;
             }
+
+            if ($this->isDuplicate("status:{$messageId}:{$statusType}")) {
+                continue;
+            }
+
+            $timestamp = Carbon::createFromTimestamp($status['timestamp'] ?? time());
 
             Log::info('WhatsApp message status update', [
                 'message_id' => $messageId,
@@ -161,22 +187,14 @@ class WhatsappWebhookController extends Controller
                 'status' => $statusType,
             ]);
 
-            switch ($statusType) {
-                case 'delivered':
-                    event(new MessageDelivered($messageId, $recipient));
-                    break;
-                case 'read':
-                    $timestamp = $status['timestamp'] ?? time();
-                    event(new MessageRead(
-                        $messageId,
-                        $recipient,
-                        Carbon::createFromTimestamp($timestamp)
-                    ));
-                    break;
-                case 'failed':
-                    event(new MessageFailed($recipient, $status['errors'] ?? [], $messageId));
-                    break;
-            }
+            event(new MessageStatusUpdated($messageId, $recipient, $statusType, $timestamp, $status, $phoneNumberId));
+
+            match ($statusType) {
+                'delivered' => event(new MessageDelivered($messageId, $recipient, $phoneNumberId, $timestamp)),
+                'read' => event(new MessageRead($messageId, $recipient, $timestamp, $phoneNumberId)),
+                'failed' => event(new MessageFailed($recipient, $status['errors'] ?? [], $messageId, [], $phoneNumberId)),
+                default => null,
+            };
         }
     }
 
@@ -187,21 +205,29 @@ class WhatsappWebhookController extends Controller
      * and dispatches the MessageReceived event.
      *
      * @param  array  $messages  Array of incoming message data
+     * @param  string|null  $phoneNumberId  The phone number ID that received the messages
+     * @param  array  $contacts  The sender contact objects from the webhook
      */
-    protected function handleIncomingMessages(array $messages): void
+    protected function handleIncomingMessages(array $messages, ?string $phoneNumberId = null, array $contacts = []): void
     {
         foreach ($messages as $message) {
             $messageId = $message['id'] ?? null;
-            $from = $message['from'] ?? null;
+            // Users with a username may only be identified by their business-scoped user ID
+            $from = $message['from'] ?? $message['from_user_id'] ?? null;
             $timestamp = $message['timestamp'] ?? time();
             $type = $message['type'] ?? 'unknown';
 
             if (! $messageId || ! $from) {
                 Log::warning('WhatsApp message missing required fields', [
                     'message_id' => $messageId,
-                    'from' => $from,
-                    'message' => $message,
+                    'type' => $type,
                 ]);
+
+                continue;
+            }
+
+            if ($this->isDuplicate("message:{$messageId}")) {
+                Log::info('Duplicate WhatsApp message skipped', ['message_id' => $messageId]);
 
                 continue;
             }
@@ -217,8 +243,105 @@ class WhatsappWebhookController extends Controller
             // Handle different message types
             $this->processMessageByType($message, $type);
 
-            event(new MessageReceived($messageId, $from, $message, Carbon::createFromTimestamp($timestamp)));
+            $contact = collect($contacts)->first(fn ($contact) => ($contact['wa_id'] ?? null) === $from
+                || ($contact['user_id'] ?? null) === ($message['from_user_id'] ?? $from)) ?? [];
+
+            event(new MessageReceived(
+                $messageId,
+                $from,
+                $message,
+                Carbon::createFromTimestamp($timestamp),
+                $phoneNumberId,
+                $contact,
+                $message['from_user_id'] ?? $contact['user_id'] ?? null,
+            ));
         }
+    }
+
+    /**
+     * Handle a template review or status change
+     *
+     * @param  array  $value  The change value from the webhook
+     * @param  string|null  $businessAccountId  The WhatsApp Business Account ID from the entry
+     */
+    protected function handleTemplateStatusUpdate(array $value, ?string $businessAccountId): void
+    {
+        $templateId = isset($value['message_template_id']) ? (string) $value['message_template_id'] : null;
+        $status = $value['event'] ?? null;
+
+        if ($templateId === null || $status === null) {
+            return;
+        }
+
+        if ($this->isDuplicate("template:{$templateId}:{$status}:".md5(json_encode($value)))) {
+            return;
+        }
+
+        Log::info('WhatsApp template status update', [
+            'template_id' => $templateId,
+            'name' => $value['message_template_name'] ?? null,
+            'status' => $status,
+        ]);
+
+        event(new TemplateStatusUpdated(
+            $templateId,
+            $value['message_template_name'] ?? '',
+            $value['message_template_language'] ?? '',
+            $status,
+            ($value['reason'] ?? 'NONE') === 'NONE' ? null : $value['reason'],
+            $value,
+            $businessAccountId,
+            $value['message_template_category'] ?? null,
+        ));
+    }
+
+    /**
+     * Handle a template quality score change
+     *
+     * @param  array  $value  The change value from the webhook
+     * @param  string|null  $businessAccountId  The WhatsApp Business Account ID from the entry
+     */
+    protected function handleTemplateQualityUpdate(array $value, ?string $businessAccountId): void
+    {
+        $templateId = isset($value['message_template_id']) ? (string) $value['message_template_id'] : null;
+        $score = $value['new_quality_score'] ?? null;
+
+        if ($templateId === null || $score === null) {
+            return;
+        }
+
+        if ($this->isDuplicate("template-quality:{$templateId}:".md5(json_encode($value)))) {
+            return;
+        }
+
+        event(new TemplateQualityUpdated(
+            $templateId,
+            $value['message_template_name'] ?? '',
+            $value['message_template_language'] ?? '',
+            $value['previous_quality_score'] ?? null,
+            $score,
+            $value,
+            $businessAccountId,
+        ));
+    }
+
+    /**
+     * Check whether an event was already processed, and remember it if not
+     *
+     * Meta retries webhooks and can deliver the same event more than once.
+     *
+     * @param  string  $key  A key identifying the event
+     */
+    protected function isDuplicate(string $key): bool
+    {
+        if (! config('whatsapp.webhook.deduplicate', true)) {
+            return false;
+        }
+
+        $minutes = (int) config('whatsapp.webhook.deduplicate_for', 1440);
+
+        return ! Cache::store(config('whatsapp.webhook.cache_store'))
+            ->add("whatsapp:webhook:{$key}", true, now()->addMinutes($minutes));
     }
 
     /**

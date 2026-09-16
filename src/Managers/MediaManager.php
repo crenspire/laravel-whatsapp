@@ -3,7 +3,7 @@
 namespace Crenspire\Whatsapp\Managers;
 
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
-use Illuminate\Support\Facades\Http;
+use Crenspire\Whatsapp\Http\GraphClient;
 
 /**
  * WhatsApp Media Manager
@@ -23,7 +23,7 @@ class MediaManager
 
     private string $phoneNumberId;
 
-    private array $headers;
+    private GraphClient $client;
 
     private string $mediaStorage;
 
@@ -32,14 +32,14 @@ class MediaManager
      *
      * @param  string  $baseUri  The API base URI
      * @param  string  $phoneNumberId  The phone number ID
-     * @param  array  $headers  The request headers
+     * @param  GraphClient  $client  The client used to call the API
      * @param  string  $mediaStorage  The media storage path
      */
-    public function __construct(string $baseUri, string $phoneNumberId, array $headers, string $mediaStorage)
+    public function __construct(string $baseUri, string $phoneNumberId, GraphClient $client, string $mediaStorage)
     {
         $this->baseUri = $baseUri;
         $this->phoneNumberId = $phoneNumberId;
-        $this->headers = $headers;
+        $this->client = $client;
         $this->mediaStorage = $mediaStorage;
     }
 
@@ -65,25 +65,15 @@ class MediaManager
             $type = mime_content_type($filePath) ?: 'application/octet-stream';
         }
 
-        // A JSON Content-Type would clobber the multipart boundary
-        $headers = array_filter(
-            $this->headers,
-            fn ($name) => strtolower($name) !== 'content-type',
-            ARRAY_FILTER_USE_KEY
-        );
-
-        $response = Http::withHeaders($headers)
-            ->attach('file', file_get_contents($filePath), basename($filePath), ['Content-Type' => $type])
-            ->post($url, [
-                'messaging_product' => 'whatsapp',
-                'type' => $type,
-            ]);
-
-        if ($response->failed()) {
-            throw new WhatsappException('Failed to upload media', $response->status(), $response->body());
-        }
-
-        return $response->json();
+        return $this->client->upload($url, [
+            'name' => 'file',
+            'contents' => file_get_contents($filePath),
+            'filename' => basename($filePath),
+            'headers' => ['Content-Type' => $type],
+        ], [
+            'messaging_product' => 'whatsapp',
+            'type' => $type,
+        ], 'upload media');
     }
 
     /**
@@ -101,13 +91,7 @@ class MediaManager
         $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream';
         $fileExtension = $this->getFileExtensionFromMimeType($mimeType);
 
-        $response = Http::withHeaders($this->headers)->get($url);
-
-        if ($response->failed()) {
-            throw new WhatsappException('Failed to download media', $response->status(), $response->body());
-        }
-
-        $binary = $response->body();
+        $binary = $this->client->download($url, 'download media');
 
         $filename = "{$mediaId}.{$fileExtension}";
         $path = $this->mediaStorage."/{$filename}";
@@ -129,13 +113,7 @@ class MediaManager
     {
         $mediaUrl = "{$this->baseUri}/{$mediaId}";
 
-        $response = Http::withHeaders($this->headers)->get($mediaUrl);
-
-        if ($response->failed()) {
-            throw new WhatsappException('Failed to fetch media information', $response->status(), $response->body());
-        }
-
-        return $response->json();
+        return $this->client->get($mediaUrl, [], 'fetch media information');
     }
 
     /**
@@ -150,13 +128,9 @@ class MediaManager
     {
         $mediaUrl = "{$this->baseUri}/{$mediaId}";
 
-        $response = Http::withHeaders($this->headers)->delete($mediaUrl);
+        $response = $this->client->delete($mediaUrl, [], 'delete media');
 
-        if ($response->failed()) {
-            throw new WhatsappException('Failed to delete media', $response->status(), $response->body());
-        }
-
-        return $response->successful();
+        return (bool) ($response['success'] ?? true);
     }
 
     /**

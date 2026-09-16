@@ -6,30 +6,26 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Message Failed Event
- *
- * This event is dispatched when a WhatsApp message fails to send.
- *
- * @author Akshay Joshi <akshay.joshi@crenspire.com>
- *
- * @version 1.0.0
- *
- * @since 1.0.0
+ * Dispatched when a send request fails, or when a webhook reports that delivery failed
  */
 class MessageFailed
 {
     use Dispatchable, SerializesModels;
 
     /**
-     * Create a new event instance
-     *
      * @param  string  $recipient  The recipient phone number
-     * @param  array  $error  The error details from the API
+     * @param  array  $error  The error from the API response, or the errors list from the webhook
      * @param  string|null  $messageId  The WhatsApp message ID, when the failure was reported by webhook
+     * @param  array  $payload  The message payload, when the send request itself failed
+     * @param  string|null  $phoneNumberId  The phone number ID the message was sent from
+     * @param  string|null  $tenantId  The tenant the message was sent for, if known
      */
     public function __construct(
         public string $recipient,
         public array $error,
-        public ?string $messageId = null
+        public ?string $messageId = null,
+        public array $payload = [],
+        public ?string $phoneNumberId = null,
+        public ?string $tenantId = null,
     ) {}
 }

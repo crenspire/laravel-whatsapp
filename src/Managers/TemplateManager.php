@@ -3,7 +3,7 @@
 namespace Crenspire\Whatsapp\Managers;
 
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
-use Illuminate\Support\Facades\Http;
+use Crenspire\Whatsapp\Http\GraphClient;
 
 /**
  * WhatsApp Template Manager
@@ -37,20 +37,20 @@ class TemplateManager
 
     private string $businessAccountId;
 
-    private array $headers;
+    private GraphClient $client;
 
     /**
      * Create a new template manager instance
      *
      * @param  string  $baseUri  The API base URI
      * @param  string  $businessAccountId  The WhatsApp Business Account ID
-     * @param  array  $headers  The request headers
+     * @param  GraphClient  $client  The client used to call the API
      */
-    public function __construct(string $baseUri, string $businessAccountId, array $headers)
+    public function __construct(string $baseUri, string $businessAccountId, GraphClient $client)
     {
         $this->baseUri = $baseUri;
         $this->businessAccountId = $businessAccountId;
-        $this->headers = $headers;
+        $this->client = $client;
     }
 
     /**
@@ -301,22 +301,13 @@ class TemplateManager
      */
     private function request(string $method, string $url, array $payload, string $action, int $timeout = 30): array
     {
-        $client = Http::withHeaders($this->headers)->timeout($timeout);
+        $client = $this->client->withTimeout($timeout);
 
-        $response = $method === 'post'
-            ? $client->post($url, $payload)
-            : $client->{$method}($url);
-
-        if ($response->failed()) {
-            $errorData = $response->json();
-            throw new WhatsappException(
-                "Failed to {$action}: ".($errorData['error']['message'] ?? 'Unknown error'),
-                $response->status(),
-                $response->body()
-            );
-        }
-
-        return $response->json() ?? [];
+        return match ($method) {
+            'post' => $client->post($url, $payload, $action),
+            'delete' => $client->delete($url, [], $action),
+            default => $client->get($url, [], $action),
+        };
     }
 
     /**

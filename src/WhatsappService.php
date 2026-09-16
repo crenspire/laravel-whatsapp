@@ -6,11 +6,13 @@ use Crenspire\Whatsapp\Builders\MessageBuilder;
 use Crenspire\Whatsapp\Builders\TemplateBuilder;
 use Crenspire\Whatsapp\Events\MessageFailed;
 use Crenspire\Whatsapp\Events\MessageSent;
+use Crenspire\Whatsapp\Exceptions\InvalidRequestException;
+use Crenspire\Whatsapp\Exceptions\RateLimitException;
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
+use Crenspire\Whatsapp\Http\GraphClient;
 use Crenspire\Whatsapp\Managers\BusinessProfileManager;
 use Crenspire\Whatsapp\Managers\MediaManager;
 use Crenspire\Whatsapp\Managers\TemplateManager;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -131,24 +133,25 @@ class WhatsappService
      * @param  string|null  $tenantId  Optional tenant ID for multi-tenant setups
      * @param  array  $customHeaders  Optional custom headers for this request
      * @param  string|null  $language  Optional language override (Meta language code, e.g. en_US)
+     * @param  string|null  $replyTo  Optional ID of a message to quote in the reply
      * @return array The API response data
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendMessage(string $to, array $message, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendMessage(string $to, array $message, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $this->validatePhoneNumber($to);
 
         $tenant = $this->tenantConfig($tenantId);
         $key = "whatsapp-send:{$tenant['phone_number_id']}";
 
-        if (! RateLimiter::attempt($key, $perMinute = $this->config['rate_limit'], fn () => true)) {
-            throw new WhatsappException('Rate limit exceeded. Try again later.');
+        if (! RateLimiter::attempt($key, $this->config['rate_limit'] ?? 30, fn () => true)) {
+            throw new RateLimitException('Rate limit exceeded. Try again later.', 429);
         }
 
         $url = "{$this->config['base_uri']}/{$tenant['phone_number_id']}/messages";
 
-        $payload = array_merge(['messaging_product' => 'whatsapp', 'to' => $to], $message);
+        $payload = $this->buildMessagePayload($to, $message, $replyTo);
 
         Log::info('Sending WhatsApp message', [
             'to' => $to,
@@ -156,32 +159,46 @@ class WhatsappService
             'message_type' => $message['type'] ?? 'unknown',
         ]);
 
-        $headers = $this->buildHeaders($tenant, $customHeaders);
-
-        $response = Http::withHeaders($headers)
-            ->timeout(30)
-            ->post($url, $payload);
-
-        if ($response->failed()) {
-            $errorData = $response->json();
+        try {
+            $data = $this->client($tenant, $customHeaders)->post($url, $payload, 'send WhatsApp message');
+        } catch (WhatsappException $e) {
             Log::error('WhatsApp message failed', [
                 'to' => $to,
-                'status' => $response->status(),
-                'error' => $errorData,
+                'status' => $e->getHttpStatus(),
+                'error_code' => $e->getErrorCode(),
+                'error' => $e->getError(),
             ]);
 
-            event(new MessageFailed($to, $errorData));
-            throw new WhatsappException(
-                'Failed to send WhatsApp message: '.($errorData['error']['message'] ?? 'Unknown error'),
-                $response->status(),
-                $response->body()
-            );
+            event(new MessageFailed($to, $e->getError(), null, $payload, $tenant['phone_number_id'], $tenantId));
+
+            throw $e;
         }
 
-        $data = $response->json();
-        event(new MessageSent($data['messages'][0]['id'] ?? null, $to, $data));
+        event(new MessageSent($data['messages'][0]['id'] ?? null, $to, $data, $payload, $tenant['phone_number_id'], $tenantId));
 
         return $data;
+    }
+
+    /**
+     * Build the full request payload for a message
+     *
+     * @param  string  $to  The recipient phone number
+     * @param  array  $message  The message payload
+     * @param  string|null  $replyTo  Optional ID of a message to quote
+     */
+    protected function buildMessagePayload(string $to, array $message, ?string $replyTo = null): array
+    {
+        $payload = array_merge(['messaging_product' => 'whatsapp', 'to' => $to], $message);
+
+        if ($replyTo !== null && ($message['type'] ?? null) === 'reaction') {
+            throw new InvalidRequestException('Reactions cannot be sent as replies');
+        }
+
+        if ($replyTo !== null) {
+            $payload['context'] = ['message_id' => $replyTo];
+        }
+
+        return $payload;
     }
 
     /**
@@ -195,11 +212,11 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendTextMessage(string $to, string $text, bool $previewUrl = false, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendTextMessage(string $to, string $text, bool $previewUrl = false, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $message = MessageBuilder::text($text, $previewUrl);
 
-        return $this->sendMessage($to, $message, $tenantId, $customHeaders, $language);
+        return $this->sendMessage($to, $message, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -214,11 +231,11 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $message = MessageBuilder::media($mediaId, $type, $caption);
 
-        return $this->sendMessage($to, $message, $tenantId, $customHeaders, $language);
+        return $this->sendMessage($to, $message, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -233,7 +250,7 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendTemplateMessage(string $to, string $templateName, array $parameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = []): array
+    public function sendTemplateMessage(string $to, string $templateName, array $parameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = [], ?string $replyTo = null): array
     {
         $tenant = $this->tenantConfig($tenantId);
         $language = $this->getLanguage($tenant, $language);
@@ -254,7 +271,7 @@ class WhatsappService
                 'language' => ['code' => $language],
                 'components' => $components,
             ],
-        ], $tenantId, $customHeaders, $language);
+        ], $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -273,7 +290,7 @@ class WhatsappService
      *
      * @throws WhatsappException When footer parameters are given, rate limit is exceeded or API call fails
      */
-    public function sendTemplateMessageWithComponents(string $to, string $templateName, array $bodyParameters = [], array $headerParameters = [], array $footerParameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = []): array
+    public function sendTemplateMessageWithComponents(string $to, string $templateName, array $bodyParameters = [], array $headerParameters = [], array $footerParameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = [], ?string $replyTo = null): array
     {
         $tenant = $this->tenantConfig($tenantId);
         $language = $this->getLanguage($tenant, $language);
@@ -305,7 +322,7 @@ class WhatsappService
                 'language' => ['code' => $language],
                 'components' => $components,
             ],
-        ], $tenantId, $customHeaders, $language);
+        ], $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -318,12 +335,12 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendInteractiveMessage(string $to, array $interactive, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendInteractiveMessage(string $to, array $interactive, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         return $this->sendMessage($to, [
             'type' => 'interactive',
             'interactive' => $interactive,
-        ], $tenantId, $customHeaders, $language);
+        ], $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -339,7 +356,7 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendButtonMessage(string $to, string $bodyText, array $buttons, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendButtonMessage(string $to, string $bodyText, array $buttons, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $interactive = [
             'type' => 'button',
@@ -365,7 +382,7 @@ class WhatsappService
             $interactive['footer'] = ['text' => $footerText];
         }
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -382,7 +399,7 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendListMessage(string $to, string $bodyText, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendListMessage(string $to, string $bodyText, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $interactive = [
             'type' => 'list',
@@ -401,7 +418,7 @@ class WhatsappService
             $interactive['footer'] = ['text' => $footerText];
         }
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -414,12 +431,12 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendContactMessage(string $to, array $contacts, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendContactMessage(string $to, array $contacts, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         return $this->sendMessage($to, [
             'type' => 'contacts',
             'contacts' => $contacts,
-        ], $tenantId, $customHeaders, $language);
+        ], $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -435,7 +452,7 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendLocationMessage(string $to, float $latitude, float $longitude, ?string $name = null, ?string $address = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendLocationMessage(string $to, float $latitude, float $longitude, ?string $name = null, ?string $address = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $location = [
             'latitude' => $latitude,
@@ -453,7 +470,7 @@ class WhatsappService
         return $this->sendMessage($to, [
             'type' => 'location',
             'location' => $location,
-        ], $tenantId, $customHeaders, $language);
+        ], $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -466,14 +483,14 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendStickerMessage(string $to, string $stickerId, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendStickerMessage(string $to, string $stickerId, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         return $this->sendMessage($to, [
             'type' => 'sticker',
             'sticker' => [
                 'id' => $stickerId,
             ],
-        ], $tenantId, $customHeaders, $language);
+        ], $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -514,7 +531,7 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendFlowMessage(string $to, string $flowToken, string $flowId, string $flowCta, string $flowAction, array $flowActionPayload, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendFlowMessage(string $to, string $flowToken, string $flowId, string $flowCta, string $flowAction, array $flowActionPayload, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $interactive = [
             'type' => 'flow',
@@ -539,7 +556,7 @@ class WhatsappService
             $interactive['footer'] = ['text' => $footerText];
         }
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -555,7 +572,7 @@ class WhatsappService
      *
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
-    public function sendSingleProductMessage(string $to, string $catalogId, string $productRetailerId, ?string $bodyText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendSingleProductMessage(string $to, string $catalogId, string $productRetailerId, ?string $bodyText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $interactive = [
             'type' => 'product',
@@ -573,7 +590,7 @@ class WhatsappService
             $interactive['footer'] = ['text' => $footerText];
         }
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -590,11 +607,11 @@ class WhatsappService
      *
      * @throws WhatsappException When the header is missing, rate limit is exceeded or API call fails
      */
-    public function sendMultiProductMessage(string $to, string $catalogId, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
+    public function sendMultiProductMessage(string $to, string $catalogId, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null, ?string $replyTo = null): array
     {
         $interactive = MessageBuilder::multiProductInteractive($catalogId, $buttonText, $sections, $headerText, $footerText);
 
-        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
+        return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language, $replyTo);
     }
 
     /**
@@ -694,6 +711,113 @@ class WhatsappService
     }
 
     /**
+     * Get details of the sending phone number, such as its display number and quality rating
+     *
+     * Also a quick way to check that the phone number ID and access token work.
+     *
+     * @param  string|null  $tenantId  Optional tenant ID for multi-tenant setups
+     * @param  array  $fields  The fields to return
+     * @return array The phone number details
+     *
+     * @throws WhatsappException When the request fails
+     */
+    public function getPhoneNumber(?string $tenantId = null, array $fields = ['display_phone_number', 'verified_name', 'quality_rating']): array
+    {
+        $tenant = $this->tenantConfig($tenantId);
+
+        return $this->client($tenant)->get(
+            "{$this->config['base_uri']}/{$tenant['phone_number_id']}",
+            ['fields' => implode(',', $fields)],
+            'fetch phone number details'
+        );
+    }
+
+    /**
+     * Upload a sample file for a template's media header
+     *
+     * Templates with an IMAGE, VIDEO or DOCUMENT header need an example file
+     * when they are created. Pass the returned handle as the header example:
+     * ['type' => 'HEADER', 'format' => 'IMAGE', 'example' => ['header_handle' => [$handle]]]
+     *
+     * Requires WHATSAPP_APP_ID. Uses Meta's resumable upload API.
+     *
+     * @param  string  $filePath  Path to a JPEG, PNG, MP4 or PDF file
+     * @param  string|null  $tenantId  Optional tenant ID for multi-tenant setups
+     * @return string The file handle
+     *
+     * @throws WhatsappException When the app ID is missing, the file type isn't supported, or the upload fails
+     */
+    public function uploadTemplateMedia(string $filePath, ?string $tenantId = null): string
+    {
+        $tenant = $this->tenantConfig($tenantId);
+        $appId = $tenantId !== null
+            ? ($this->config['tenants'][$tenantId]['app_id'] ?? $this->config['app_id'] ?? null)
+            : ($this->config['app_id'] ?? null);
+
+        if (empty($appId)) {
+            throw new WhatsappException('WHATSAPP_APP_ID is required to upload template media');
+        }
+
+        if (! is_file($filePath)) {
+            throw new WhatsappException("File not found: {$filePath}");
+        }
+
+        $mimeType = mime_content_type($filePath) ?: '';
+        $allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'video/mp4'];
+
+        if (! in_array($mimeType, $allowed, true)) {
+            throw new InvalidRequestException(
+                'Template media must be one of: '.implode(', ', $allowed).". Got: {$mimeType}"
+            );
+        }
+
+        $client = $this->client($tenant);
+
+        $session = $client->post("{$this->config['base_uri']}/{$appId}/uploads?".http_build_query([
+            'file_name' => basename($filePath),
+            'file_length' => filesize($filePath),
+            'file_type' => $mimeType,
+        ]), [], 'start template media upload', idempotent: true);
+
+        $sessionId = $session['id'] ?? throw new WhatsappException('Upload session ID missing from response');
+
+        $result = $client->postRaw(
+            "{$this->config['base_uri']}/{$sessionId}",
+            (string) file_get_contents($filePath),
+            'application/octet-stream',
+            ['Authorization' => 'OAuth '.$tenant['access_token'], 'file_offset' => '0'],
+            'upload template media'
+        );
+
+        return $result['h'] ?? throw new WhatsappException('File handle missing from upload response');
+    }
+
+    /**
+     * Get the apps subscribed to webhooks for the business account
+     *
+     * An empty list means Meta won't send webhooks for this account.
+     *
+     * @param  string|null  $tenantId  Optional tenant ID for multi-tenant setups
+     * @return array The subscribed apps
+     *
+     * @throws WhatsappException When no business account ID is configured or the request fails
+     */
+    public function getWebhookSubscriptions(?string $tenantId = null): array
+    {
+        $tenant = $this->tenantConfig($tenantId);
+
+        if (empty($tenant['business_account_id'])) {
+            throw new WhatsappException('Business Account ID is required to check webhook subscriptions');
+        }
+
+        return $this->client($tenant)->get(
+            "{$this->config['base_uri']}/{$tenant['business_account_id']}/subscribed_apps",
+            [],
+            'fetch webhook subscriptions'
+        )['data'] ?? [];
+    }
+
+    /**
      * Mark message as read
      *
      * @param  string  $messageId  The message ID to mark as read
@@ -704,31 +828,59 @@ class WhatsappService
      */
     public function markMessageAsRead(string $messageId, ?string $tenantId = null, array $customHeaders = []): array
     {
+        return $this->sendStatus($messageId, [], 'mark message as read', $tenantId, $customHeaders);
+    }
+
+    /**
+     * Mark a received message as read and show a typing indicator to the customer
+     *
+     * The indicator is dismissed when you send a reply, or after 25 seconds.
+     * Only show it when you're about to respond.
+     *
+     * @param  string  $messageId  The ID of the message you're replying to
+     * @param  string|null  $tenantId  Optional tenant ID for multi-tenant setups
+     * @param  array  $customHeaders  Optional custom headers for this request
+     * @return array The API response data
+     *
+     * @throws WhatsappException When the request fails
+     */
+    public function showTypingIndicator(string $messageId, ?string $tenantId = null, array $customHeaders = []): array
+    {
+        return $this->sendStatus($messageId, ['typing_indicator' => ['type' => 'text']], 'show typing indicator', $tenantId, $customHeaders);
+    }
+
+    /**
+     * Send a read status update for a received message
+     *
+     * @param  array  $extra  Extra payload fields, e.g. a typing indicator
+     *
+     * @throws WhatsappException When the request fails
+     */
+    protected function sendStatus(string $messageId, array $extra, string $action, ?string $tenantId, array $customHeaders): array
+    {
         $tenant = $this->tenantConfig($tenantId);
 
-        $url = "{$this->config['base_uri']}/{$tenant['phone_number_id']}/messages";
-        $headers = $this->buildHeaders($tenant, $customHeaders);
+        return $this->client($tenant, $customHeaders)->post(
+            "{$this->config['base_uri']}/{$tenant['phone_number_id']}/messages",
+            array_merge([
+                'messaging_product' => 'whatsapp',
+                'status' => 'read',
+                'message_id' => $messageId,
+            ], $extra),
+            $action,
+            idempotent: true
+        );
+    }
 
-        $payload = [
-            'messaging_product' => 'whatsapp',
-            'status' => 'read',
-            'message_id' => $messageId,
-        ];
-
-        $response = Http::withHeaders($headers)
-            ->timeout(30)
-            ->post($url, $payload);
-
-        if ($response->failed()) {
-            $errorData = $response->json();
-            throw new WhatsappException(
-                'Failed to mark message as read: '.($errorData['error']['message'] ?? 'Unknown error'),
-                $response->status(),
-                $response->body()
-            );
-        }
-
-        return $response->json();
+    /**
+     * Build an API client with the tenant's credentials and headers
+     *
+     * @param  array  $tenant  The tenant configuration
+     * @param  array  $customHeaders  Custom headers for this request
+     */
+    protected function client(array $tenant, array $customHeaders = []): GraphClient
+    {
+        return GraphClient::fromConfig($this->config, $this->buildHeaders($tenant, $customHeaders));
     }
 
     /**
@@ -766,7 +918,7 @@ class WhatsappService
         return new MediaManager(
             $this->config['base_uri'],
             $tenant['phone_number_id'],
-            $this->buildHeaders($tenant, $customHeaders),
+            $this->client($tenant, $customHeaders),
             $this->config['media_storage']
         );
     }
@@ -785,7 +937,7 @@ class WhatsappService
         return new BusinessProfileManager(
             $this->config['base_uri'],
             $tenant['phone_number_id'],
-            $this->buildHeaders($tenant, $customHeaders)
+            $this->client($tenant, $customHeaders)
         );
     }
 
@@ -834,7 +986,7 @@ class WhatsappService
         return new TemplateManager(
             $this->config['base_uri'],
             $tenant['business_account_id'],
-            $this->buildHeaders($tenant)
+            $this->client($tenant)
         );
     }
 

@@ -3,7 +3,7 @@
 namespace Crenspire\Whatsapp\Managers;
 
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
-use Illuminate\Support\Facades\Http;
+use Crenspire\Whatsapp\Http\GraphClient;
 
 /**
  * WhatsApp Business Profile Manager
@@ -27,20 +27,20 @@ class BusinessProfileManager
 
     private string $phoneNumberId;
 
-    private array $headers;
+    private GraphClient $client;
 
     /**
      * Create a new business profile manager instance
      *
      * @param  string  $baseUri  The API base URI
      * @param  string  $phoneNumberId  The phone number ID
-     * @param  array  $headers  The request headers
+     * @param  GraphClient  $client  The client used to call the API
      */
-    public function __construct(string $baseUri, string $phoneNumberId, array $headers)
+    public function __construct(string $baseUri, string $phoneNumberId, GraphClient $client)
     {
         $this->baseUri = $baseUri;
         $this->phoneNumberId = $phoneNumberId;
-        $this->headers = $headers;
+        $this->client = $client;
     }
 
     /**
@@ -52,16 +52,11 @@ class BusinessProfileManager
      */
     public function get(): array
     {
-        $profileUrl = "{$this->baseUri}/{$this->phoneNumberId}/whatsapp_business_profile?"
-            .http_build_query(['fields' => implode(',', self::FIELDS)]);
-
-        $response = Http::withHeaders($this->headers)->get($profileUrl);
-
-        if ($response->failed()) {
-            throw new WhatsappException('Failed to fetch business profile', $response->status(), $response->body());
-        }
-
-        return $response->json();
+        return $this->client->get(
+            "{$this->baseUri}/{$this->phoneNumberId}/whatsapp_business_profile",
+            ['fields' => implode(',', self::FIELDS)],
+            'fetch business profile'
+        );
     }
 
     /**
@@ -74,22 +69,12 @@ class BusinessProfileManager
      */
     public function update(array $profileData): array
     {
-        $profileUrl = "{$this->baseUri}/{$this->phoneNumberId}/whatsapp_business_profile";
-
-        $response = Http::withHeaders($this->headers)
-            ->timeout(30)
-            ->post($profileUrl, array_merge(['messaging_product' => 'whatsapp'], $profileData));
-
-        if ($response->failed()) {
-            $errorData = $response->json();
-            throw new WhatsappException(
-                'Failed to update business profile: '.($errorData['error']['message'] ?? 'Unknown error'),
-                $response->status(),
-                $response->body()
-            );
-        }
-
-        return $response->json();
+        return $this->client->post(
+            "{$this->baseUri}/{$this->phoneNumberId}/whatsapp_business_profile",
+            array_merge(['messaging_product' => 'whatsapp'], $profileData),
+            'update business profile',
+            idempotent: true
+        );
     }
 
     /**

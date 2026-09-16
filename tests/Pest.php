@@ -24,6 +24,11 @@ function whatsappConfig(array $overrides = []): array
         'default_language' => 'en_US',
         'tenants' => [],
         'rate_limit' => 30,
+        'timeout' => 30,
+        'retry' => ['times' => 3, 'sleep' => 0],
+        'webhook' => ['deduplicate' => true, 'deduplicate_for' => 1440, 'cache_store' => null],
+        'message_log' => ['enabled' => false, 'connection' => null],
+        'app_id' => 'app_123',
         'media_storage' => sys_get_temp_dir().'/whatsapp-media',
         'debug' => false,
     ], $overrides);
@@ -35,4 +40,20 @@ function whatsappConfig(array $overrides = []): array
 function makeService(array $overrides = []): WhatsappService
 {
     return new WhatsappService(whatsappConfig($overrides));
+}
+
+/**
+ * Build a webhook payload from entries.
+ */
+function webhookPayload(array $entries): array
+{
+    return ['object' => 'whatsapp_business_account', 'entry' => $entries];
+}
+
+/**
+ * Build a webhook entry with one messages change.
+ */
+function webhookEntry(array $value): array
+{
+    return ['id' => 'waba_123', 'changes' => [['field' => 'messages', 'value' => $value]]];
 }

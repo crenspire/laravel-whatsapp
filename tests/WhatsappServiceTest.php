@@ -2,6 +2,7 @@
 
 use Crenspire\Whatsapp\Events\MessageFailed;
 use Crenspire\Whatsapp\Events\MessageSent;
+use Crenspire\Whatsapp\Exceptions\InvalidRequestException;
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
 use Crenspire\Whatsapp\WhatsappService;
 use Illuminate\Http\Client\Request;
@@ -535,4 +536,96 @@ it('requests business profile fields and sends messaging_product on update', fun
     $requests = Http::recorded();
     expect($requests[0][0]->url())->toContain('fields=about%2Caddress%2Cdescription%2Cemail%2Cprofile_picture_url%2Cwebsites%2Cvertical');
     expect($requests[1][0]->data())->toBe(['messaging_product' => 'whatsapp', 'about' => 'Hello']);
+});
+
+// Replies, typing indicators and account details
+
+it('quotes a message when replying', function () {
+    fakeMessageSent();
+
+    makeService()->sendTextMessage('1234567890', 'Thanks!', replyTo: 'wamid.original');
+    makeService()->sendButtonMessage('1234567890', 'Pick one', [['id' => 'a', 'title' => 'A']], replyTo: 'wamid.other');
+
+    Http::assertSent(fn (Request $request) => ($request['text']['body'] ?? null) === 'Thanks!'
+        && $request['context'] === ['message_id' => 'wamid.original']);
+    Http::assertSent(fn (Request $request) => ($request['type'] ?? null) === 'interactive'
+        && $request['context'] === ['message_id' => 'wamid.other']);
+});
+
+it('does not add context when not replying', function () {
+    fakeMessageSent();
+
+    makeService()->sendTextMessage('1234567890', 'Hello');
+
+    Http::assertSent(fn (Request $request) => ! isset($request['context']));
+});
+
+it('rejects reactions sent as replies', function () {
+    Http::fake();
+
+    expect(fn () => makeService()->sendMessage('1234567890', ['type' => 'reaction', 'reaction' => ['message_id' => 'w', 'emoji' => '👍']], replyTo: 'wamid.1'))
+        ->toThrow(InvalidRequestException::class, 'Reactions cannot be sent as replies');
+
+    Http::assertNothingSent();
+});
+
+it('shows a typing indicator', function () {
+    Http::fake(['*/messages' => Http::response(['success' => true])]);
+
+    makeService()->showTypingIndicator('wamid.in');
+
+    Http::assertSent(fn (Request $request) => $request->url() === MESSAGES_URL && $request->data() === [
+        'messaging_product' => 'whatsapp',
+        'status' => 'read',
+        'message_id' => 'wamid.in',
+        'typing_indicator' => ['type' => 'text'],
+    ]);
+});
+
+it('uploads template media with the resumable upload API', function () {
+    $file = sys_get_temp_dir().'/wa-template-'.uniqid().'.png';
+    file_put_contents($file, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAMAASsJTYQAAAAASUVORK5CYII='));
+
+    Http::fake([
+        'https://graph.facebook.com/v20.0/app_123/uploads*' => Http::response(['id' => 'upload:session_1']),
+        'https://graph.facebook.com/v20.0/upload:session_1' => Http::response(['h' => '4::handle']),
+    ]);
+
+    expect(makeService()->uploadTemplateMedia($file))->toBe('4::handle');
+
+    $requests = Http::recorded();
+    parse_str(parse_url($requests[0][0]->url(), PHP_URL_QUERY), $query);
+    expect($query)->toBe(['file_name' => basename($file), 'file_length' => (string) filesize($file), 'file_type' => 'image/png']);
+    expect($requests[1][0]->header('Authorization'))->toBe(['OAuth test_token'])
+        ->and($requests[1][0]->header('file_offset'))->toBe(['0'])
+        ->and($requests[1][0]->body())->toBe(file_get_contents($file));
+
+    unlink($file);
+});
+
+it('requires an app ID and a supported file for template media', function () {
+    Http::fake();
+    $text = sys_get_temp_dir().'/wa-template-'.uniqid().'.txt';
+    file_put_contents($text, 'plain text');
+
+    expect(fn () => makeService(['app_id' => null])->uploadTemplateMedia($text))
+        ->toThrow(WhatsappException::class, 'WHATSAPP_APP_ID is required');
+    expect(fn () => makeService()->uploadTemplateMedia($text))
+        ->toThrow(InvalidRequestException::class, 'Template media must be one of');
+
+    Http::assertNothingSent();
+    unlink($text);
+});
+
+it('gets phone number details and webhook subscriptions', function () {
+    Http::fake([
+        'https://graph.facebook.com/v20.0/123456789?*' => Http::response(['display_phone_number' => '+1 555', 'quality_rating' => 'GREEN']),
+        'https://graph.facebook.com/v20.0/waba_123/subscribed_apps' => Http::response(['data' => [['whatsapp_business_api_data' => ['id' => 'app_123']]]]),
+    ]);
+    $service = makeService();
+
+    expect($service->getPhoneNumber()['quality_rating'])->toBe('GREEN')
+        ->and($service->getWebhookSubscriptions()[0]['whatsapp_business_api_data']['id'])->toBe('app_123');
+
+    Http::assertSent(fn (Request $request) => str_contains($request->url(), 'fields=display_phone_number%2Cverified_name%2Cquality_rating'));
 });

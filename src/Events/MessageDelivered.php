@@ -2,32 +2,27 @@
 
 namespace Crenspire\Whatsapp\Events;
 
+use Carbon\Carbon;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Message Delivered Event
- *
- * This event is dispatched when a WhatsApp message is delivered to the recipient.
- *
- * @author Akshay Joshi <akshay.joshi@crenspire.com>
- *
- * @version 1.0.0
- *
- * @since 1.0.0
+ * Dispatched when a message reaches the customer's phone
  */
 class MessageDelivered
 {
     use Dispatchable, SerializesModels;
 
     /**
-     * Create a new event instance
-     *
      * @param  string|null  $messageId  The WhatsApp message ID
      * @param  string  $recipient  The recipient phone number
+     * @param  string|null  $phoneNumberId  The phone number ID the message was sent from
+     * @param  Carbon|null  $timestamp  When the message was delivered
      */
     public function __construct(
         public ?string $messageId,
-        public string $recipient
+        public string $recipient,
+        public ?string $phoneNumberId = null,
+        public ?Carbon $timestamp = null,
     ) {}
 }
