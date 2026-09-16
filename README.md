@@ -1,543 +1,442 @@
-# Laravel WhatsApp Business API Package
+# Laravel WhatsApp
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/crenspire/laravel-whatsapp.svg?style=flat-square)](https://packagist.org/packages/crenspire/laravel-whatsapp)
+[![Tests](https://img.shields.io/github/actions/workflow/status/crenspire/laravel-whatsapp/tests.yml?branch=develop&label=tests&style=flat-square)](https://github.com/crenspire/laravel-whatsapp/actions)
 [![Total Downloads](https://img.shields.io/packagist/dt/crenspire/laravel-whatsapp.svg?style=flat-square)](https://packagist.org/packages/crenspire/laravel-whatsapp)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/crenspire/laravel-whatsapp/tests.yml?branch=main&style=flat-square)](https://github.com/crenspire/laravel-whatsapp/actions)
-[![Test Coverage](https://img.shields.io/codecov/c/github/crenspire/laravel-whatsapp?style=flat-square)](https://codecov.io/gh/crenspire/laravel-whatsapp)
-[![PHP Version](https://img.shields.io/packagist/php-v/crenspire/laravel-whatsapp?style=flat-square)](https://packagist.org/packages/crenspire/laravel-whatsapp)
-[![Laravel Version](https://img.shields.io/packagist/dependency-v/crenspire/laravel-whatsapp/illuminate/contracts?style=flat-square)](https://packagist.org/packages/crenspire/laravel-whatsapp)
-[![License](https://img.shields.io/packagist/l/crenspire/laravel-whatsapp?style=flat-square)](https://packagist.org/packages/crenspire/laravel-whatsapp)
-[![StyleCI](https://github.styleci.io/repos/123456789/shield?branch=main)](https://github.styleci.io/repos/123456789)
 
-A comprehensive Laravel package for integrating with the WhatsApp Business Cloud API. This package provides a clean, easy-to-use interface for sending messages, handling webhooks, managing media, and supporting multi-tenant applications.
+Send and receive WhatsApp messages from Laravel using Meta's [WhatsApp Business Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api).
+
+```php
+use Crenspire\Whatsapp\Facades\Whatsapp;
+
+Whatsapp::sendTextMessage('15551234567', 'Your order has shipped.');
+```
+
+Incoming messages and delivery receipts arrive as regular Laravel events, so you handle them with listeners like anything else in your app.
 
 ## Features
 
-- ✅ **Complete Message Types**: Text, media, templates, interactive messages (buttons, lists), contacts, location, stickers, reactions, flows, and product messages
-- ✅ **Fluent API**: Builder patterns for easy message construction with `MessageBuilder` and `TemplateBuilder`
-- ✅ **Webhook Support**: Secure webhook handling with signature verification and comprehensive message type processing
-- ✅ **Media Management**: Upload, download, info retrieval, and deletion with automatic type detection via `MediaManager`
-- ✅ **Business Profile Management**: Get and update business profile information via `BusinessProfileManager`
-- ✅ **Multi-tenant Support**: Per-tenant configuration for phone numbers and access tokens
-- ✅ **Rate Limiting**: Built-in rate limiting to respect WhatsApp API limits
-- ✅ **Event System**: Laravel events for message status updates and incoming messages
-- ✅ **Comprehensive Testing**: Full test coverage with realistic scenarios
-- ✅ **Security**: Webhook verification and signature validation
-- ✅ **Logging**: Detailed logging for debugging and monitoring
-- ✅ **Clean Architecture**: Separated concerns with dedicated managers and builders
+| | |
+|---|---|
+| **Messages** | Text, image, video, audio, document, sticker, location, contacts, reactions |
+| **Interactive messages** | Reply buttons, lists, WhatsApp Flows, single and multi-product catalog messages |
+| **Templates** | Send templates with text or media parameters, and create, edit, delete and check the approval status of templates |
+| **Media** | Upload, download to local storage, look up and delete media |
+| **Webhooks** | Verification endpoint, signature checking, and events for received, delivered, read and failed messages |
+| **Multiple numbers** | Send from several WhatsApp numbers or business accounts, each with its own token |
+| **Business profile** | Read and update the profile shown to your customers |
+| **Extras** | Read receipts, per-number rate limiting, custom request headers |
+
+## Requirements
+
+- PHP 8.2+
+- Laravel 10, 11 or 12
+- A Meta app with the WhatsApp product added ([getting started guide](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started))
 
 ## Installation
-
-### 1. Install the Package
 
 ```bash
 composer require crenspire/laravel-whatsapp
 ```
 
-### 2. Publish Configuration
+The service provider and `Whatsapp` facade are registered automatically. Publish the config file if you want to change the defaults:
 
 ```bash
-php artisan vendor:publish --tag=whatsapp-config --provider="Crenspire\\Whatsapp\\WhatsappServiceProvider"
+php artisan vendor:publish --tag=whatsapp-config
 ```
 
-### 3. Configure Environment Variables
+## Configuration
 
-Add these variables to your `.env` file:
+Add your credentials to `.env`:
 
 ```env
-# WhatsApp Business API Configuration
-WHATSAPP_BASE_URI=https://graph.facebook.com/v20.0
-WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
-WHATSAPP_ACCESS_TOKEN=your_access_token
-WHATSAPP_BUSINESS_ACCOUNT_ID=your_business_account_id
-
-# Webhook Configuration
-WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_webhook_verify_token
-WHATSAPP_WEBHOOK_SECRET=your_app_secret
-
-# Optional Configuration
-WHATSAPP_RATE_LIMIT=30
-WHATSAPP_DEBUG=false
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_BUSINESS_ACCOUNT_ID=
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+WHATSAPP_WEBHOOK_SECRET=
 ```
 
-### 4. Set Up Webhook Routes
+Where to find them in the [Meta App Dashboard](https://developers.facebook.com/apps):
 
-The package automatically registers webhook routes. Make sure your webhook URL is configured in your WhatsApp Business API settings:
+- **Phone number ID** and **WhatsApp Business Account ID**: WhatsApp → API Setup.
+- **Access token**: the token on the API Setup page expires after 24 hours. For production, create a System User in Business Settings and generate a permanent token with the `whatsapp_business_messaging` and `whatsapp_business_management` permissions.
+- **Webhook verify token**: any random string you choose. You'll enter the same value when configuring the webhook.
+- **Webhook secret**: your app's **App Secret** (App settings → Basic). It's used to check that webhook requests really come from Meta.
 
-- **Verification URL**: `https://yourdomain.com/whatsapp/webhook`
-- **Webhook URL**: `https://yourdomain.com/whatsapp/webhook`
+The business account ID is only needed for template management.
 
-## Quick Start
+Other options:
 
-### Basic Usage
+| Variable | Default | |
+|---|---|---|
+| `WHATSAPP_BASE_URI` | `https://graph.facebook.com/v20.0` | Graph API version to call |
+| `WHATSAPP_DEFAULT_LANGUAGE` | `en_US` | Language used for template messages when none is given |
+| `WHATSAPP_RATE_LIMIT` | `30` | Maximum messages sent per minute, per phone number |
+| `WHATSAPP_DEBUG` | `false` | Log full webhook payloads (they contain message contents) |
+
+## Sending messages
+
+Pass phone numbers with the country code, like `15551234567`. A leading `+` and formatting characters are accepted too.
+
+Every send method returns the decoded API response. The message ID is in `$response['messages'][0]['id']`.
+
+### Text
 
 ```php
-use Crenspire\Whatsapp\Facades\Whatsapp;
+Whatsapp::sendTextMessage('15551234567', 'Hello!');
 
-// Send a text message
-$response = Whatsapp::sendTextMessage('1234567890', 'Hello from Laravel!');
-
-// Send a media message
-$response = Whatsapp::sendMediaMessage('1234567890', 'media_id_123', 'image', 'Check this out!');
-
-// Send a template message
-$response = Whatsapp::sendTemplateMessage('1234567890', 'hello_world', ['John', 'Doe']);
+// Show a preview for the first link in the message
+Whatsapp::sendTextMessage('15551234567', 'Track it here: https://example.com/t/123', previewUrl: true);
 ```
 
-### Using the Service Directly
+### Media
+
+Media is sent by ID, so upload the file first. The ID can be reused for 30 days.
 
 ```php
-use Crenspire\Whatsapp\WhatsappService;
+$media = Whatsapp::uploadMedia(storage_path('app/invoices/1042.pdf'), 'application/pdf');
 
-$whatsapp = app(WhatsappService::class);
-
-$response = $whatsapp->sendTextMessage('1234567890', 'Hello World!');
+Whatsapp::sendMediaMessage('15551234567', $media['id'], 'document', caption: 'Invoice #1042');
 ```
 
-## Message Types
+The type is `image`, `video`, `audio`, `document` or `sticker`. Captions work on images, videos and documents.
 
-### Text Messages
+### Templates
+
+Outside the 24-hour window after a customer last messaged you, WhatsApp only lets you send approved templates.
 
 ```php
-Whatsapp::sendTextMessage('1234567890', 'Hello World!');
+// Fill the body placeholders {{1}} and {{2}}
+Whatsapp::sendTemplateMessage('15551234567', 'order_shipped', ['Sarah', '#1042']);
+
+// Use a different language version of the template
+Whatsapp::sendTemplateMessage('15551234567', 'order_shipped', ['Sara', '#1042'], language: 'es_ES');
 ```
 
-### Media Messages
+For templates with a media header, pass header parameters in the shape the API expects:
 
 ```php
-// Send image with caption
-Whatsapp::sendMediaMessage('1234567890', 'media_id_123', 'image', 'Check this out!');
-
-// Send video
-Whatsapp::sendMediaMessage('1234567890', 'media_id_456', 'video', 'Watch this video');
-
-// Send document
-Whatsapp::sendMediaMessage('1234567890', 'media_id_789', 'document', 'Important document');
-```
-
-### Template Messages
-
-```php
-// Send template with parameters
-Whatsapp::sendTemplateMessage(
-    '1234567890', 
-    'hello_world', 
-    ['John', 'Doe'], 
-    'en_US'
+Whatsapp::sendTemplateMessageWithComponents(
+    to: '15551234567',
+    templateName: 'order_shipped_with_photo',
+    bodyParameters: ['Sarah', '#1042'],
+    headerParameters: [
+        ['type' => 'image', 'image' => ['link' => 'https://example.com/parcel.jpg']],
+    ],
 );
 ```
 
-### Interactive Messages
-
-#### Button Messages
+Templates with buttons are easier to build with the template builder:
 
 ```php
-$buttons = [
-    ['id' => 'btn1', 'title' => 'Option 1'],
-    ['id' => 'btn2', 'title' => 'Option 2'],
-    ['id' => 'btn3', 'title' => 'Option 3']
-];
+$template = Whatsapp::template('delivery_update')
+    ->body(['Sarah', 'Thursday'])
+    ->button('url', ['tracking/1042'], index: 0)
+    ->build();
 
-Whatsapp::sendButtonMessage(
-    '1234567890',
-    'Choose an option:',
-    $buttons,
-    'Header Text',
-    'Footer Text'
-);
+Whatsapp::sendMessage('15551234567', $template);
 ```
 
-#### List Messages
+### Buttons and lists
 
 ```php
-$sections = [
-    [
-        'title' => 'Category 1',
-        'rows' => [
-            [
-                'id' => 'row1',
-                'title' => 'Option 1',
-                'description' => 'Description for option 1'
-            ],
-            [
-                'id' => 'row2',
-                'title' => 'Option 2',
-                'description' => 'Description for option 2'
-            ]
-        ]
-    ]
-];
+Whatsapp::sendButtonMessage('15551234567', 'Can we deliver tomorrow?', [
+    ['id' => 'delivery_yes', 'title' => 'Yes'],
+    ['id' => 'delivery_no', 'title' => 'Pick another day'],
+]);
 
 Whatsapp::sendListMessage(
-    '1234567890',
-    'Choose from the list:',
-    'View Options',
-    $sections,
-    'Header Text',
-    'Footer Text'
+    to: '15551234567',
+    bodyText: 'Choose a delivery slot',
+    buttonText: 'View slots',
+    sections: [
+        [
+            'title' => 'Thursday',
+            'rows' => [
+                ['id' => 'thu_am', 'title' => 'Morning', 'description' => '8am to 12pm'],
+                ['id' => 'thu_pm', 'title' => 'Afternoon', 'description' => '12pm to 5pm'],
+            ],
+        ],
+    ],
 );
 ```
 
-## Media Management
+WhatsApp allows up to three reply buttons. When the customer taps one, you receive a `MessageReceived` event containing the button's `id` (see [Webhooks](#webhooks)).
 
-### Upload Media
+### Location, contacts, stickers and reactions
 
 ```php
-$response = Whatsapp::uploadMedia('/path/to/image.jpg', 'image/jpeg');
-$mediaId = $response['id'];
+Whatsapp::sendLocationMessage('15551234567', 51.5072, -0.1276, name: 'Our shop', address: '1 High Street, London');
 
-// Use the media ID to send the image
-Whatsapp::sendMediaMessage('1234567890', $mediaId, 'image', 'Uploaded image');
+Whatsapp::sendContactMessage('15551234567', [
+    [
+        'name' => ['formatted_name' => 'Support Team', 'first_name' => 'Support'],
+        'phones' => [['phone' => '+15550001111', 'type' => 'WORK']],
+    ],
+]);
+
+Whatsapp::sendStickerMessage('15551234567', $stickerMediaId);
+
+Whatsapp::sendReactionMessage('15551234567', $messageId, '👍');
 ```
 
-### Download Media
+### Flows and product messages
 
 ```php
-$filePath = Whatsapp::downloadMedia('media_id_123');
-// File is saved to storage/app/whatsapp-media/media_id_123.jpg
+Whatsapp::sendFlowMessage(
+    to: '15551234567',
+    flowToken: 'booking-1042',
+    flowId: '1234567890',
+    flowCta: 'Book a table',
+    flowAction: 'navigate',
+    flowActionPayload: ['screen' => 'BOOKING'],
+);
+
+Whatsapp::sendSingleProductMessage('15551234567', $catalogId, 'SKU-123', bodyText: 'Back in stock');
+
+Whatsapp::sendMultiProductMessage(
+    to: '15551234567',
+    catalogId: $catalogId,
+    buttonText: 'Picked for you this week',
+    sections: [
+        ['title' => 'New in', 'product_items' => [['product_retailer_id' => 'SKU-123']]],
+    ],
+    headerText: 'Weekly picks',
+);
 ```
 
-## Multi-tenant Support
+For multi-product messages, `buttonText` is the body text and `headerText` is required.
 
-Configure multiple WhatsApp Business accounts:
+### Read receipts
 
 ```php
-// In config/whatsapp.php
-'tenants' => [
-    'company1' => [
-        'phone_number_id' => 'phone_number_1',
-        'access_token' => 'access_token_1'
-    ],
-    'company2' => [
-        'phone_number_id' => 'phone_number_2',
-        'access_token' => 'access_token_2'
-    ]
-]
+Whatsapp::markMessageAsRead($event->messageId);
 ```
 
-Use tenant-specific configuration:
+### Anything else
+
+If you need a message type or option the helpers don't cover, send the raw payload. `messaging_product` and `to` are added for you:
 
 ```php
-// Send message using specific tenant
-Whatsapp::sendTextMessage('1234567890', 'Hello!', false, 'company1');
+Whatsapp::sendMessage('15551234567', [
+    'type' => 'text',
+    'text' => ['body' => 'Hello', 'preview_url' => false],
+]);
 ```
 
-## Webhook Handling
+## Webhooks
 
-### Event Listeners
+The package registers the webhook route for you:
 
-The package dispatches several events that you can listen to:
-
-```php
-// In your EventServiceProvider
-protected $listen = [
-    \Crenspire\Whatsapp\Events\MessageSent::class => [
-        // Your listener
-    ],
-    \Crenspire\Whatsapp\Events\MessageDelivered::class => [
-        // Your listener
-    ],
-    \Crenspire\Whatsapp\Events\MessageRead::class => [
-        // Your listener
-    ],
-    \Crenspire\Whatsapp\Events\MessageReceived::class => [
-        // Your listener
-    ],
-    \Crenspire\Whatsapp\Events\MessageFailed::class => [
-        // Your listener
-    ],
-];
+```
+GET|POST  /whatsapp/webhook
 ```
 
-### Example Event Listener
+In the Meta App Dashboard, go to WhatsApp → Configuration, set the callback URL to `https://your-app.com/whatsapp/webhook`, enter your verify token, and subscribe to the `messages` field. The route doesn't use the `web` middleware group, so you don't need to exclude it from CSRF protection.
+
+When `WHATSAPP_WEBHOOK_SECRET` is set, requests with a missing or wrong signature are rejected with a 401. Without it, requests are accepted and a warning is logged each time. Set it in production.
+
+### Events
+
+| Event | Dispatched when | Properties |
+|---|---|---|
+| `MessageReceived` | A customer sends you a message | `messageId`, `from`, `message`, `timestamp` |
+| `MessageDelivered` | A message reaches the customer's phone | `messageId`, `recipient` |
+| `MessageRead` | The customer reads a message | `messageId`, `recipient`, `timestamp` |
+| `MessageFailed` | A send request fails, or WhatsApp later reports that delivery failed | `recipient`, `error`, `messageId` |
+| `MessageSent` | The API accepts a message you sent | `messageId`, `recipient`, `response` |
+
+All events are in the `Crenspire\Whatsapp\Events` namespace. `message` is the raw message from the webhook, including the text, media ID or button reply:
 
 ```php
-<?php
-
-namespace App\Listeners;
-
 use Crenspire\Whatsapp\Events\MessageReceived;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Crenspire\Whatsapp\Facades\Whatsapp;
+use Illuminate\Support\Facades\Event;
 
-class HandleIncomingMessage implements ShouldQueue
-{
-    public function handle(MessageReceived $event)
-    {
-        // Handle incoming message
-        $messageId = $event->messageId;
-        $from = $event->from;
-        $message = $event->message;
-        $timestamp = $event->timestamp;
-        
-        // Your logic here
+// In a service provider's boot() method, or as a listener class
+Event::listen(function (MessageReceived $event) {
+    $message = $event->message;
+
+    if ($message['type'] === 'interactive' && isset($message['interactive']['button_reply'])) {
+        $choice = $message['interactive']['button_reply']['id']; // e.g. "delivery_yes"
+        // ...
     }
-}
+
+    if ($message['type'] === 'text') {
+        Whatsapp::markMessageAsRead($event->messageId);
+        Whatsapp::sendTextMessage($event->from, 'Thanks, we got your message.');
+    }
+});
 ```
 
-## Error Handling
+Meta retries webhooks that don't get a quick 200 response, and can deliver the same event more than once. Queue slow work (make the listener implement `ShouldQueue`) and use `messageId` to skip duplicates.
 
-The package throws `WhatsappException` for various error conditions:
+## Managing templates
+
+These methods need `WHATSAPP_BUSINESS_ACCOUNT_ID`.
+
+```php
+$template = Whatsapp::createTemplate('order_shipped', 'en_US', 'UTILITY', [
+    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Your order is on its way'],
+    ['type' => 'BODY', 'text' => 'Hi {{1}}, order {{2}} has shipped.'],
+    ['type' => 'FOOTER', 'text' => 'Reply STOP to opt out'],
+]);
+
+$template['status']; // PENDING
+```
+
+New and edited templates go to Meta for review automatically; there's no separate publish step. Check the result later:
+
+```php
+Whatsapp::getTemplateStatus('order_shipped');   // APPROVED, PENDING, REJECTED, PAUSED, ...
+Whatsapp::isTemplateApproved('order_shipped');
+
+Whatsapp::getTemplates();                       // one page of results, with paging cursors
+Whatsapp::getTemplates(['limit' => 100, 'after' => $cursor]);
+Whatsapp::getTemplatesByStatus('REJECTED');
+Whatsapp::getTemplatesByCategory('MARKETING');
+Whatsapp::getTemplatesByLanguage('es_ES');
+Whatsapp::getTemplate('order_shipped');
+
+// Replaces all components of the en_US version and sends it for review again
+Whatsapp::updateTemplate('order_shipped', 'en_US', 'UTILITY', $components);
+
+// Deletes every language version
+Whatsapp::deleteTemplate('order_shipped');
+```
+
+The category must be `MARKETING`, `UTILITY` or `AUTHENTICATION`. Meta limits how often an approved template can be edited, so it's worth getting templates right before they're approved.
+
+## Media
+
+```php
+$media = Whatsapp::uploadMedia($path, 'image/jpeg');   // ['id' => '...']
+
+$info = Whatsapp::getMediaInfo($mediaId);              // url, mime_type, file_size, sha256
+$path = Whatsapp::downloadMedia($mediaId);             // path of the saved file
+Whatsapp::deleteMedia($mediaId);
+```
+
+`uploadMedia` expects a MIME type. If you pass a category like `image`, the MIME type is detected from the file. Downloads are saved to the `media_storage` directory from the config, `storage/app/whatsapp-media` by default.
+
+To save a photo a customer sent you, use the media ID from the incoming message:
+
+```php
+Event::listen(function (MessageReceived $event) {
+    if ($event->message['type'] === 'image') {
+        $path = Whatsapp::downloadMedia($event->message['image']['id']);
+    }
+});
+```
+
+## Multiple phone numbers
+
+If your app sends from more than one WhatsApp number, for example one per customer account, add each one under `tenants` in `config/whatsapp.php`:
+
+```php
+'tenants' => [
+    'acme' => [
+        'phone_number_id' => env('ACME_WHATSAPP_PHONE_NUMBER_ID'),
+        'access_token' => env('ACME_WHATSAPP_ACCESS_TOKEN'),
+        'business_account_id' => env('ACME_WHATSAPP_BUSINESS_ACCOUNT_ID'), // optional
+        'language' => 'de_DE',                                             // optional
+        'headers' => [],                                                   // optional
+    ],
+],
+```
+
+Then pass the tenant ID to any method. Named arguments keep this readable:
+
+```php
+Whatsapp::sendTextMessage('15551234567', 'Hallo!', tenantId: 'acme');
+Whatsapp::uploadMedia($path, 'image/png', tenantId: 'acme');
+Whatsapp::getTemplates(tenantId: 'acme');
+```
+
+Calls without a tenant ID use the top-level credentials. An unknown tenant ID throws an exception instead of falling back to the default number.
+
+## Business profile
+
+```php
+$profile = Whatsapp::getBusinessProfile()['data'][0];
+
+Whatsapp::updateBusinessProfile([
+    'about' => 'Fresh flowers, delivered daily',
+    'email' => 'hello@example.com',
+    'websites' => ['https://example.com'],
+]);
+```
+
+## Errors and rate limiting
+
+Failed API calls throw `Crenspire\Whatsapp\Exceptions\WhatsappException`. The exception code is the HTTP status, and the message includes Meta's error and the response body:
 
 ```php
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
 
 try {
-    Whatsapp::sendTextMessage('1234567890', 'Hello!');
+    Whatsapp::sendTextMessage($phone, $text);
 } catch (WhatsappException $e) {
-    // Handle WhatsApp API errors
-    logger('WhatsApp error: ' . $e->getMessage());
+    report($e);
 }
 ```
 
-## Rate Limiting
+Each phone number can send `WHATSAPP_RATE_LIMIT` messages per minute. Going over throws a `WhatsappException` without calling the API. The limit is tracked in your application cache, so use a shared store such as Redis if you send from several servers or queue workers.
 
-The package includes built-in rate limiting to respect WhatsApp API limits:
+## Custom headers
 
-```php
-// Configure rate limit in config/whatsapp.php
-'rate_limit' => 30, // messages per minute
-```
-
-## Logging
-
-Enable debug logging:
+Add headers to every request with the `default_headers` config option, per tenant with the tenant's `headers` key, or on a single call:
 
 ```php
-// In config/whatsapp.php
-'debug' => true,
+Whatsapp::sendTextMessage('15551234567', 'Hello', customHeaders: ['X-Request-Id' => $requestId]);
 ```
 
-Or set in your `.env`:
+Per-call headers override tenant headers, which override the defaults.
 
-```env
-WHATSAPP_DEBUG=true
+## Testing your app
+
+The package uses Laravel's HTTP client, so `Http::fake()` keeps your tests from sending real messages:
+
+```php
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+
+Http::fake([
+    'graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]]),
+]);
+
+// ... run the code that sends a message
+
+Http::assertSent(fn (Request $request) =>
+    $request['to'] === '15551234567' && $request['text']['body'] === 'Your order has shipped.'
+);
 ```
 
-## Testing
+To test webhook listeners, post a sample payload to `/whatsapp/webhook`. Meta's [webhook reference](https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components) has examples of every payload type.
 
-Run the test suite:
+## Development
 
 ```bash
-composer test
+composer test       # Pest
+composer analyse    # PHPStan
+composer format     # Pint
 ```
 
-The package includes comprehensive tests covering all functionality.
+More documentation is in the [docs](docs) folder, including the [API reference](docs/api-reference.md) and [troubleshooting](docs/troubleshooting.md).
 
-## Security
+## Changelog
 
-### Webhook Verification
-
-The package verifies the `X-Hub-Signature-256` header of every webhook when `WHATSAPP_WEBHOOK_SECRET` is set to your Meta **App Secret** (App Dashboard → App settings → Basic):
-
-```env
-WHATSAPP_WEBHOOK_SECRET=your_app_secret
-```
-
-Without it, anyone who knows the webhook URL can post fake events, so a warning is logged for every unsigned request.
-
-### Phone Number Validation
-
-All phone numbers are validated before sending messages to ensure they meet WhatsApp's requirements.
-
-## 🔧 Custom Headers Support
-
-The package now supports custom headers for all API requests, allowing you to add authentication, tracking, or other custom headers:
-
-### Basic Usage
-
-```php
-// Using custom headers with individual requests
-$customHeaders = [
-    'X-Request-ID' => 'req_12345',
-    'X-Client-Version' => '2.0.0',
-    'X-Custom-Auth' => 'custom_token'
-];
-
-Whatsapp::sendTextMessage('+1234567890', 'Hello!', false, null, $customHeaders);
-
-// Using custom headers with media upload
-Whatsapp::uploadMedia('/path/to/file.jpg', 'image/jpeg', null, $customHeaders);
-
-// Using custom headers with media download
-$filePath = Whatsapp::downloadMedia('media_id_123', null, $customHeaders);
-```
-
-### Multi-tenant Headers
-
-Configure per-tenant headers in your configuration:
-
-```php
-// config/whatsapp.php
-'tenants' => [
-    'tenant1' => [
-        'phone_number_id' => '123456789',
-        'access_token' => 'token1',
-        'headers' => [
-            'X-Tenant-ID' => 'tenant1',
-            'X-API-Version' => 'v2.0',
-            'X-Custom-Header' => 'tenant1-value'
-        ]
-    ],
-    'tenant2' => [
-        'phone_number_id' => '987654321',
-        'access_token' => 'token2',
-        'headers' => [
-            'X-Tenant-ID' => 'tenant2',
-            'X-API-Version' => 'v1.5'
-        ]
-    ]
-]
-```
-
-### Default Headers
-
-Set default headers for all requests:
-
-```php
-// config/whatsapp.php
-'default_headers' => [
-    'Content-Type' => 'application/json',
-    'Accept' => 'application/json',
-    'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
-    'X-Client-Name' => 'MyApp',
-    'X-Client-Version' => '1.0.0'
-],
-```
-
-### Header Priority
-
-Headers are merged in the following order (later overrides earlier):
-1. Default headers from configuration
-2. Tenant-specific headers
-3. Custom headers passed to individual methods
-
-## Configuration Reference
-
-See [Configuration](docs/configuration.md) for detailed configuration options.
-
-## API Reference
-
-See [API Reference](docs/api-reference.md) for complete method documentation.
-
-## Enhanced Features
-
-### New Message Types
-
-The package now supports all WhatsApp Cloud API message types:
-
-- **Contact Messages**: Send contact cards
-- **Location Messages**: Share location with optional name and address
-- **Sticker Messages**: Send stickers
-- **Reaction Messages**: React to existing messages
-- **Flow Messages**: Send interactive flows
-- **Product Messages**: Single and multi-product catalogs
-
-### Fluent API
-
-Use the new builder patterns for cleaner code:
-
-```php
-// Template builder
-$template = Whatsapp::template('welcome_template', 'en_US')
-    ->header([['type' => 'text', 'text' => 'Welcome!']])
-    ->body([['type' => 'text', 'text' => 'Hello {{1}}!']])
-    ->build();
-
-// Message builder
-$message = Whatsapp::message()::text('Hello with preview!', true);
-```
-
-### Business Profile Management
-
-```php
-// Get business profile
-$profile = Whatsapp::getBusinessProfile();
-
-// Update business profile
-Whatsapp::updateBusinessProfile([
-    'messaging_product' => 'whatsapp',
-    'about' => 'Updated business description'
-]);
-```
-
-### Enhanced Media Management
-
-```php
-// Get media information
-$info = Whatsapp::getMediaInfo('media_id_123');
-
-// Delete media
-Whatsapp::deleteMedia('media_id_123');
-```
-
-### Template Management
-
-Create, edit, delete, and check the status of message templates. Templates are submitted for review automatically when created or edited:
-
-```php
-// Create a new template
-$components = [
-    [
-        'type' => 'HEADER',
-        'format' => 'TEXT',
-        'text' => 'Order Confirmation'
-    ],
-    [
-        'type' => 'BODY',
-        'text' => 'Hi {{1}}, your order {{2}} has been confirmed.'
-    ],
-    [
-        'type' => 'FOOTER',
-        'text' => 'Thank you for shopping with us!'
-    ]
-];
-
-$result = Whatsapp::createTemplate(
-    'order_confirmation',
-    'en_US',
-    'UTILITY',
-    $components
-);
-
-// Update an existing template
-$result = Whatsapp::updateTemplate(
-    'order_confirmation',
-    'en_US',
-    'UTILITY',
-    $updatedComponents
-);
-
-// Get all templates
-$templates = Whatsapp::getTemplates();
-
-// Get templates by status
-$approvedTemplates = Whatsapp::getTemplatesByStatus('APPROVED');
-$pendingTemplates = Whatsapp::getTemplatesByStatus('PENDING');
-
-// Get templates by category
-$utilityTemplates = Whatsapp::getTemplatesByCategory('UTILITY');
-$marketingTemplates = Whatsapp::getTemplatesByCategory('MARKETING');
-
-// Check template status
-$status = Whatsapp::getTemplateStatus('order_confirmation');
-$isApproved = Whatsapp::isTemplateApproved('order_confirmation');
-
-// Delete template
-$deleted = Whatsapp::deleteTemplate('old_template');
-```
-
-## Examples
-
-See [Examples](docs/examples.md) for real-world usage examples.
-
-## Troubleshooting
-
-See [Troubleshooting](docs/troubleshooting.md) for common issues and solutions.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
-Contributions are welcome! Please see [Contributing](docs/contributing.md) for guidelines.
+Pull requests are welcome. Please add tests for your change and run the commands above before opening one. See [docs/contributing.md](docs/contributing.md).
+
+## Security
+
+If you find a security issue, please email akshay.joshi@crenspire.com instead of opening a public issue.
 
 ## License
 
-This package is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Released under the MIT License.
