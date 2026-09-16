@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Crenspire\Whatsapp\Events\MessageDelivered;
+use Crenspire\Whatsapp\Events\MessageFailed;
 use Crenspire\Whatsapp\Events\MessageRead;
 use Crenspire\Whatsapp\Events\MessageReceived;
 
@@ -36,8 +37,11 @@ class WhatsappWebhookController extends Controller
         $mode = $request->query('hub_mode');
         $token = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
+        $expectedToken = config('whatsapp.webhook_verify_token');
 
-        if ($mode === 'subscribe' && $token === config('whatsapp.webhook_verify_token')) {
+        if ($mode === 'subscribe'
+            && is_string($expectedToken) && $expectedToken !== ''
+            && is_string($token) && hash_equals($expectedToken, $token)) {
             Log::info('WhatsApp webhook verified successfully');
             return response($challenge, 200);
         }
@@ -45,7 +49,7 @@ class WhatsappWebhookController extends Controller
         Log::warning('WhatsApp webhook verification failed', [
             'mode' => $mode,
             'token_provided' => $token !== null,
-            'expected_token' => config('whatsapp.webhook_verify_token')
+            'token_configured' => !empty($expectedToken),
         ]);
 
         return response('Forbidden', 403);
@@ -58,7 +62,7 @@ class WhatsappWebhookController extends Controller
      * message status updates and incoming messages.
      * 
      * @param Request $request The incoming HTTP request
-     * @return \Illuminate\Http\JsonResponse The response confirming receipt
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse The receipt confirmation, or 401 for an invalid signature
      */
     public function handle(Request $request)
     {
@@ -68,22 +72,35 @@ class WhatsappWebhookController extends Controller
                 Log::warning('WhatsApp webhook signature verification failed');
                 return response('Unauthorized', 401);
             }
+        } else {
+            Log::warning('WhatsApp webhook accepted without signature verification; set WHATSAPP_WEBHOOK_SECRET to your app secret');
         }
 
         $data = $request->all();
-        
+
         Log::info('WhatsApp webhook received', [
-            'data' => $data
+            'object' => $data['object'] ?? null,
+            'entries' => count($data['entry'] ?? []),
         ]);
 
-        // Handle message status updates
-        if (isset($data['entry'][0]['changes'][0]['value']['statuses'])) {
-            $this->handleStatusUpdates($data['entry'][0]['changes'][0]['value']['statuses']);
+        // The payload contains user messages, so only log it in debug mode
+        if (config('whatsapp.debug')) {
+            Log::debug('WhatsApp webhook payload', ['data' => $data]);
         }
 
-        // Handle incoming messages
-        if (isset($data['entry'][0]['changes'][0]['value']['messages'])) {
-            $this->handleIncomingMessages($data['entry'][0]['changes'][0]['value']['messages']);
+        // Meta may batch several entries and changes into one delivery
+        foreach ($data['entry'] ?? [] as $entry) {
+            foreach ($entry['changes'] ?? [] as $change) {
+                $value = $change['value'] ?? [];
+
+                if (isset($value['statuses']) && is_array($value['statuses'])) {
+                    $this->handleStatusUpdates($value['statuses']);
+                }
+
+                if (isset($value['messages']) && is_array($value['messages'])) {
+                    $this->handleIncomingMessages($value['messages']);
+                }
+            }
         }
 
         return response()->json(['status' => 'ok']);
@@ -150,6 +167,9 @@ class WhatsappWebhookController extends Controller
                         $recipient,
                         \Carbon\Carbon::createFromTimestamp($timestamp)
                     ));
+                    break;
+                case 'failed':
+                    event(new MessageFailed($recipient, $status['errors'] ?? [], $messageId));
                     break;
             }
         }

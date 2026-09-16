@@ -18,6 +18,10 @@ use Crenspire\Whatsapp\Exceptions\WhatsappException;
  */
 class BusinessProfileManager
 {
+    public const FIELDS = [
+        'about', 'address', 'description', 'email', 'profile_picture_url', 'websites', 'vertical',
+    ];
+
     private string $baseUri;
     private string $phoneNumberId;
     private array $headers;
@@ -44,12 +48,13 @@ class BusinessProfileManager
      */
     public function get(): array
     {
-        $profileUrl = "{$this->baseUri}/{$this->phoneNumberId}/whatsapp_business_profile";
-        
+        $profileUrl = "{$this->baseUri}/{$this->phoneNumberId}/whatsapp_business_profile?"
+            . http_build_query(['fields' => implode(',', self::FIELDS)]);
+
         $response = Http::withHeaders($this->headers)->get($profileUrl);
 
         if ($response->failed()) {
-            throw new WhatsappException("Failed to fetch business profile");
+            throw new WhatsappException("Failed to fetch business profile", $response->status(), $response->body());
         }
 
         return $response->json();
@@ -68,7 +73,7 @@ class BusinessProfileManager
         
         $response = Http::withHeaders($this->headers)
                         ->timeout(30)
-                        ->post($profileUrl, $profileData);
+                        ->post($profileUrl, array_merge(['messaging_product' => 'whatsapp'], $profileData));
 
         if ($response->failed()) {
             $errorData = $response->json();
@@ -123,7 +128,7 @@ class BusinessProfileManager
     {
         return $this->update([
             'messaging_product' => 'whatsapp',
-            'website' => [$website]
+            'websites' => [$website]
         ]);
     }
 

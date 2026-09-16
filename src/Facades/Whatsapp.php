@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Facade;
  * @since 1.0.0
  * 
  * @method static array sendMessage(string $to, array $message, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
- * @method static array sendTextMessage(string $to, string $text, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
+ * @method static array sendTextMessage(string $to, string $text, bool $previewUrl = false, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
  * @method static array sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
  * @method static array sendTemplateMessage(string $to, string $templateName, array $parameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = [])
  * @method static array sendTemplateMessageWithComponents(string $to, string $templateName, array $bodyParameters = [], array $headerParameters = [], array $footerParameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = [])
@@ -37,6 +37,17 @@ use Illuminate\Support\Facades\Facade;
  * @method static array getBusinessProfile(?string $tenantId = null, array $customHeaders = [])
  * @method static array updateBusinessProfile(array $profileData, ?string $tenantId = null, array $customHeaders = [])
  * @method static array markMessageAsRead(string $messageId, ?string $tenantId = null, array $customHeaders = [])
+ * @method static array createTemplate(string $name, string $language, string $category, array $components, ?string $tenantId = null)
+ * @method static array updateTemplate(string $name, string $language, string $category, array $components, ?string $tenantId = null)
+ * @method static bool deleteTemplate(string $name, ?string $tenantId = null)
+ * @method static array getTemplates(array $filters = [], ?string $tenantId = null)
+ * @method static array getTemplate(string $name, ?string $tenantId = null)
+ * @method static array getTemplatesByStatus(string $status, ?string $tenantId = null)
+ * @method static array getTemplatesByCategory(string $category, ?string $tenantId = null)
+ * @method static array getTemplatesByLanguage(string $language, ?string $tenantId = null)
+ * @method static string getTemplateStatus(string $name, ?string $tenantId = null)
+ * @method static bool isTemplateApproved(string $name, ?string $tenantId = null)
+ * @method static bool isTemplatePending(string $name, ?string $tenantId = null)
  * @method static \Crenspire\Whatsapp\Builders\TemplateBuilder template(string $templateName, ?string $language = null, ?string $tenantId = null)
  * @method static \Crenspire\Whatsapp\Builders\MessageBuilder message()
  */

@@ -1,739 +1,546 @@
 <?php
 
-use Crenspire\Whatsapp\WhatsappService;
+use Crenspire\Whatsapp\Events\MessageFailed;
+use Crenspire\Whatsapp\Events\MessageSent;
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
+use Crenspire\Whatsapp\WhatsappService;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 
-it('has proper configuration structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+const MESSAGES_URL = 'https://graph.facebook.com/v20.0/123456789/messages';
+
+function fakeMessageSent(): void
+{
+    Http::fake([
+        '*/messages' => Http::response(['messages' => [['id' => 'wamid.123']]]),
     ]);
+}
 
-    $reflection = new ReflectionClass($service);
-    $property = $reflection->getProperty('config');
-    $property->setAccessible(true);
-    $config = $property->getValue($service);
-
-    expect($config)->toHaveKey('phone_number_id');
-    expect($config)->toHaveKey('access_token');
-    expect($config)->toHaveKey('base_uri');
-    expect($config)->toHaveKey('rate_limit');
-    expect($config)->toHaveKey('media_storage');
-    expect($config)->toHaveKey('tenants');
-});
-
-it('validates phone number format', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+function tenantService(): WhatsappService
+{
+    return makeService([
+        'tenants' => [
+            'tenant1' => [
+                'phone_number_id' => 'tenant_phone',
+                'access_token' => 'tenant_token',
+                'business_account_id' => 'tenant_waba',
+                'headers' => ['X-Tenant-Header' => 'tenant1-value'],
+                'language' => 'fr_FR',
+            ],
+        ],
     ]);
+}
 
-    expect(fn () => $service->sendTextMessage('123', 'Hello'))
-        ->toThrow(WhatsappException::class, 'Invalid phone number format');
+// Configuration and helpers
 
-    expect(fn () => $service->sendTextMessage('12345678901234567890', 'Hello'))
-        ->toThrow(WhatsappException::class, 'Invalid phone number format');
+it('resolves the service from the container', function () {
+    expect(app(WhatsappService::class))->toBeInstanceOf(WhatsappService::class);
 });
 
 it('creates media storage directory', function () {
     $tempDir = sys_get_temp_dir() . '/whatsapp-test-' . uniqid();
-    
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => $tempDir,
-        'tenants' => []
-    ]);
+
+    makeService(['media_storage' => $tempDir]);
 
     expect(is_dir($tempDir))->toBeTrue();
-    expect(is_writable($tempDir))->toBeTrue();
-    
     rmdir($tempDir);
 });
 
-it('gets file extension from mime type', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('validates phone number format', function (string $number, bool $valid) {
+    $method = new ReflectionMethod(WhatsappService::class, 'validatePhoneNumber');
+    $call = fn () => $method->invoke(makeService(), $number);
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('getFileExtensionFromMimeType');
-    $method->setAccessible(true);
+    $valid
+        ? expect($call)->not->toThrow(WhatsappException::class)
+        : expect($call)->toThrow(WhatsappException::class, 'Invalid phone number format');
+})->with([
+    ['1234567890', true],
+    ['123456789012345', true],
+    ['+1234567890', true],
+    ['123-456-7890', true],
+    ['123', false],
+    ['12345678901234567890', false],
+    ['abc123def', false],
+]);
 
-    expect($method->invoke($service, 'image/jpeg'))->toBe('jpg');
-    expect($method->invoke($service, 'image/png'))->toBe('png');
-    expect($method->invoke($service, 'video/mp4'))->toBe('mp4');
-    expect($method->invoke($service, 'application/pdf'))->toBe('pdf');
-    expect($method->invoke($service, 'unknown/type'))->toBe('bin');
-});
+it('uses default configuration without a tenant', function () {
+    $config = (new ReflectionMethod(WhatsappService::class, 'tenantConfig'))->invoke(makeService(), null);
 
-it('validates phone number correctly', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('validatePhoneNumber');
-    $method->setAccessible(true);
-
-    // Valid phone numbers should not throw
-    expect(fn () => $method->invoke($service, '1234567890'))->not->toThrow(Exception::class);
-    expect(fn () => $method->invoke($service, '123456789012345'))->not->toThrow(Exception::class);
-    expect(fn () => $method->invoke($service, '+1234567890'))->not->toThrow(Exception::class);
-    expect(fn () => $method->invoke($service, '123-456-7890'))->not->toThrow(Exception::class);
-
-    // Invalid phone numbers should throw
-    expect(fn () => $method->invoke($service, '123'))->toThrow(WhatsappException::class);
-    expect(fn () => $method->invoke($service, '12345678901234567890'))->toThrow(WhatsappException::class);
-    expect(fn () => $method->invoke($service, 'abc123def'))->toThrow(WhatsappException::class);
+    expect($config)
+        ->toMatchArray([
+            'phone_number_id' => '123456789',
+            'access_token' => 'test_token',
+            'business_account_id' => 'waba_123',
+            'headers' => [],
+            'language' => 'en_US',
+        ]);
 });
 
 it('uses tenant configuration when provided', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => 'default123',
-        'access_token' => 'default_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => [
-            'tenant1' => [
-                'phone_number_id' => 'tenant123',
-                'access_token' => 'tenant_token'
-            ]
-        ]
-    ]);
+    $config = (new ReflectionMethod(WhatsappService::class, 'tenantConfig'))->invoke(tenantService(), 'tenant1');
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('tenantConfig');
-    $method->setAccessible(true);
-
-    // Test default configuration
-    $defaultConfig = $method->invoke($service, null);
-    expect($defaultConfig['phone_number_id'])->toBe('default123');
-    expect($defaultConfig['access_token'])->toBe('default_token');
-
-    // Test tenant configuration
-    $tenantConfig = $method->invoke($service, 'tenant1');
-    expect($tenantConfig['phone_number_id'])->toBe('tenant123');
-    expect($tenantConfig['access_token'])->toBe('tenant_token');
+    expect($config)
+        ->toMatchArray([
+            'phone_number_id' => 'tenant_phone',
+            'access_token' => 'tenant_token',
+            'business_account_id' => 'tenant_waba',
+            'headers' => ['X-Tenant-Header' => 'tenant1-value'],
+            'language' => 'fr_FR',
+        ]);
 });
 
-it('handles file upload validation', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+it('falls back to the global business account ID for tenants without one', function () {
+    $service = makeService([
+        'tenants' => ['tenant1' => ['phone_number_id' => 'p', 'access_token' => 't']],
     ]);
 
-    $nonExistentFile = sys_get_temp_dir() . '/non-existent-file.jpg';
-    
-    expect(fn () => $service->uploadMedia($nonExistentFile, 'image'))
-        ->toThrow(WhatsappException::class, 'File not found');
+    $config = (new ReflectionMethod(WhatsappService::class, 'tenantConfig'))->invoke($service, 'tenant1');
+
+    expect($config['business_account_id'])->toBe('waba_123');
 });
 
-it('creates proper button message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('rejects unknown tenants instead of using default credentials', function () {
+    Http::fake();
 
-    $buttons = [
-        ['id' => 'btn1', 'title' => 'Option 1'],
-        ['id' => 'btn2', 'title' => 'Option 2']
-    ];
+    expect(fn () => makeService()->sendTextMessage('1234567890', 'Hi', false, 'missing'))
+        ->toThrow(WhatsappException::class, 'Unknown WhatsApp tenant: missing');
 
-    // Test the button message structure by calling sendButtonMessage
-    // We'll mock the HTTP call to avoid actual API calls
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendButtonMessage');
-    $method->setAccessible(true);
-
-    // This will fail due to HTTP call, but we can check the structure
-    expect(fn () => $method->invoke($service, '1234567890', 'Test', $buttons))
-        ->toThrow(Exception::class);
+    Http::assertNothingSent();
 });
 
-it('creates proper list message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('merges headers with custom headers taking precedence', function () {
+    $headers = (new ReflectionMethod(WhatsappService::class, 'buildHeaders'))->invoke(
+        makeService(),
+        ['access_token' => 'test_token', 'headers' => ['X-Custom-Header' => 'tenant', 'X-Tenant-ID' => 't1']],
+        ['X-Custom-Header' => 'override', 'X-Request-ID' => 'req123']
+    );
 
-    $sections = [
-        [
-            'title' => 'Section 1',
-            'rows' => [
-                ['id' => 'row1', 'title' => 'Row 1', 'description' => 'Description 1']
-            ]
-        ]
-    ];
-
-    // Test the list message structure
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendListMessage');
-    $method->setAccessible(true);
-
-    // This will fail due to HTTP call, but we can check the structure
-    expect(fn () => $method->invoke($service, '1234567890', 'Test', 'Button', $sections))
-        ->toThrow(Exception::class);
-});
-
-it('builds headers correctly with default configuration', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_headers' => [
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-            'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
-        ],
-        'tenants' => []
-    ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('buildHeaders');
-    $method->setAccessible(true);
-
-    $tenantConfig = [
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'headers' => []
-    ];
-
-    $headers = $method->invoke($service, $tenantConfig);
-
-    expect($headers)->toHaveKey('Content-Type', 'application/json');
-    expect($headers)->toHaveKey('Accept', 'application/json');
-    expect($headers)->toHaveKey('User-Agent', 'Laravel-WhatsApp-Package/1.0.0');
-    expect($headers)->toHaveKey('Authorization', 'Bearer test_token');
-});
-
-it('builds headers correctly with custom headers', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_headers' => [
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-        ],
-        'tenants' => []
-    ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('buildHeaders');
-    $method->setAccessible(true);
-
-    $tenantConfig = [
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'headers' => [
-            'X-Custom-Header' => 'custom-value',
-            'X-Tenant-ID' => 'tenant123'
-        ]
-    ];
-
-    $customHeaders = [
+    expect($headers)->toMatchArray([
+        'Content-Type' => 'application/json',
+        'Accept' => 'application/json',
+        'Authorization' => 'Bearer test_token',
+        'X-Custom-Header' => 'override',
+        'X-Tenant-ID' => 't1',
         'X-Request-ID' => 'req123',
-        'X-Custom-Header' => 'override-value' // This should override tenant header
-    ];
-
-    $headers = $method->invoke($service, $tenantConfig, $customHeaders);
-
-    expect($headers)->toHaveKey('Content-Type', 'application/json');
-    expect($headers)->toHaveKey('Accept', 'application/json');
-    expect($headers)->toHaveKey('Authorization', 'Bearer test_token');
-    expect($headers)->toHaveKey('X-Custom-Header', 'override-value'); // Custom should override tenant
-    expect($headers)->toHaveKey('X-Tenant-ID', 'tenant123');
-    expect($headers)->toHaveKey('X-Request-ID', 'req123');
+    ]);
 });
 
-it('handles tenant configuration with custom headers', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => 'default_phone',
-        'access_token' => 'default_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_headers' => [
-            'Content-Type' => 'application/json',
-        ],
-        'tenants' => [
-            'tenant1' => [
-                'phone_number_id' => 'tenant_phone',
-                'access_token' => 'tenant_token',
-                'headers' => [
-                    'X-Tenant-Header' => 'tenant1-value',
-                    'X-API-Version' => 'v2.0'
-                ]
-            ]
-        ]
-    ]);
+it('resolves language from override, tenant, then default', function () {
+    $method = new ReflectionMethod(WhatsappService::class, 'getLanguage');
+    $service = makeService(['default_language' => 'en_GB']);
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('tenantConfig');
-    $method->setAccessible(true);
-
-    $tenantConfig = $method->invoke($service, 'tenant1');
-
-    expect($tenantConfig)->toHaveKey('phone_number_id', 'tenant_phone');
-    expect($tenantConfig)->toHaveKey('access_token', 'tenant_token');
-    expect($tenantConfig)->toHaveKey('headers');
-    expect($tenantConfig['headers'])->toHaveKey('X-Tenant-Header', 'tenant1-value');
-    expect($tenantConfig['headers'])->toHaveKey('X-API-Version', 'v2.0');
+    expect($method->invoke($service, ['language' => 'es_ES'], 'de_DE'))->toBe('de_DE');
+    expect($method->invoke($service, ['language' => 'es_ES'], null))->toBe('es_ES');
+    expect($method->invoke($service, ['language' => null], null))->toBe('en_GB');
 });
 
-it('supports custom headers in sendTextMessage', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_headers' => [
-            'Content-Type' => 'application/json',
-        ],
-        'tenants' => []
-    ]);
+// Messaging
 
-    // Test that the method accepts custom headers parameter
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendTextMessage');
-    $method->setAccessible(true);
+it('sends a text message', function () {
+    Event::fake();
+    fakeMessageSent();
 
-    // This will fail due to HTTP call, but we can verify the method signature
-    expect(fn () => $method->invoke($service, '1234567890', 'Test message', null, ['X-Custom' => 'value']))
-        ->toThrow(Exception::class);
+    $response = makeService()->sendTextMessage('1234567890', 'Hello', true);
+
+    expect($response['messages'][0]['id'])->toBe('wamid.123');
+
+    Http::assertSent(fn (Request $request) =>
+        $request->url() === MESSAGES_URL
+        && $request->method() === 'POST'
+        && $request->hasHeader('Authorization', 'Bearer test_token')
+        && $request->data() === [
+            'messaging_product' => 'whatsapp',
+            'to' => '1234567890',
+            'type' => 'text',
+            'text' => ['body' => 'Hello', 'preview_url' => true],
+        ]);
+
+    Event::assertDispatched(MessageSent::class, fn ($event) =>
+        $event->messageId === 'wamid.123' && $event->recipient === '1234567890');
 });
 
-it('handles language configuration correctly', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_language' => 'es-ES',
-        'tenants' => []
+it('throws and dispatches MessageFailed when the API rejects a message', function () {
+    Event::fake();
+    Http::fake([
+        '*/messages' => Http::response(['error' => ['message' => 'Invalid parameter']], 400),
     ]);
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('tenantConfig');
-    $method->setAccessible(true);
+    expect(fn () => makeService()->sendTextMessage('1234567890', 'Hello'))
+        ->toThrow(WhatsappException::class, 'Failed to send WhatsApp message: Invalid parameter');
 
-    $tenantConfig = $method->invoke($service, null);
-
-    expect($tenantConfig)->toHaveKey('language', 'es-ES');
+    Event::assertDispatched(MessageFailed::class);
+    Event::assertNotDispatched(MessageSent::class);
 });
 
-it('handles tenant-specific language configuration', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => 'default_phone',
-        'access_token' => 'default_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_language' => 'en-US',
-        'tenants' => [
-            'tenant1' => [
-                'phone_number_id' => 'tenant_phone',
-                'access_token' => 'tenant_token',
-                'language' => 'fr-FR'
-            ]
-        ]
-    ]);
+it('enforces the rate limit per phone number', function () {
+    fakeMessageSent();
+    $service = makeService(['rate_limit' => 1]);
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('tenantConfig');
-    $method->setAccessible(true);
+    $service->sendTextMessage('1234567890', 'First');
 
-    $tenantConfig = $method->invoke($service, 'tenant1');
-
-    expect($tenantConfig)->toHaveKey('language', 'fr-FR');
+    expect(fn () => $service->sendTextMessage('1234567890', 'Second'))
+        ->toThrow(WhatsappException::class, 'Rate limit exceeded');
 });
 
-it('gets language correctly with custom override', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_language' => 'en-US',
-        'tenants' => []
-    ]);
+it('sends custom headers with a message', function () {
+    fakeMessageSent();
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('getLanguage');
-    $method->setAccessible(true);
+    makeService()->sendTextMessage('1234567890', 'Hello', false, null, ['X-Custom' => 'value']);
 
-    $tenantConfig = [
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'headers' => [],
-        'language' => 'es-ES'
-    ];
-
-    // Test with custom language override
-    $language = $method->invoke($service, $tenantConfig, 'de-DE');
-    expect($language)->toBe('de-DE');
-
-    // Test with tenant language
-    $language = $method->invoke($service, $tenantConfig, null);
-    expect($language)->toBe('es-ES');
-
-    // Test with default language
-    $tenantConfig['language'] = null;
-    $language = $method->invoke($service, $tenantConfig, null);
-    expect($language)->toBe('en-US');
+    Http::assertSent(fn (Request $request) => $request->hasHeader('X-Custom', 'value'));
 });
 
-it('supports language parameter in sendTextMessage', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_language' => 'en-US',
-        'tenants' => []
-    ]);
+it('sends messages with tenant credentials', function () {
+    fakeMessageSent();
 
-    // Test that the method accepts language parameter
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendTextMessage');
-    $method->setAccessible(true);
+    tenantService()->sendTextMessage('1234567890', 'Hello', false, 'tenant1');
 
-    // This will fail due to HTTP call, but we can verify the method signature
-    expect(fn () => $method->invoke($service, '1234567890', 'Test message', null, [], 'es-ES'))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) =>
+        $request->url() === 'https://graph.facebook.com/v20.0/tenant_phone/messages'
+        && $request->hasHeader('Authorization', 'Bearer tenant_token')
+        && $request->hasHeader('X-Tenant-Header', 'tenant1-value'));
 });
 
-it('supports language parameter in sendTemplateMessage', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'default_language' => 'en-US',
-        'tenants' => []
-    ]);
+it('sends a media message with caption', function () {
+    fakeMessageSent();
 
-    // Test that the method accepts language parameter
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendTemplateMessage');
-    $method->setAccessible(true);
+    makeService()->sendMediaMessage('1234567890', 'media_1', 'image', 'A caption');
 
-    // This will fail due to HTTP call, but we can verify the method signature
-    expect(fn () => $method->invoke($service, '1234567890', 'test_template', [], 'fr-FR', null, []))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) =>
+        $request['type'] === 'image'
+        && $request['image'] === ['id' => 'media_1', 'caption' => 'A caption']);
 });
 
-it('creates proper contact message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('sends a template message using the tenant language', function () {
+    fakeMessageSent();
 
-    $contacts = [
-        [
-            'name' => [
-                'formatted_name' => 'John Doe',
-                'first_name' => 'John',
-                'last_name' => 'Doe'
+    tenantService()->sendTemplateMessage('1234567890', 'order_update', ['John', '42'], null, 'tenant1');
+
+    Http::assertSent(fn (Request $request) => $request['template'] === [
+        'name' => 'order_update',
+        'language' => ['code' => 'fr_FR'],
+        'components' => [[
+            'type' => 'body',
+            'parameters' => [
+                ['type' => 'text', 'text' => 'John'],
+                ['type' => 'text', 'text' => '42'],
             ],
-            'phones' => [
-                [
-                    'phone' => '+1234567890',
-                    'type' => 'WORK'
-                ]
-            ]
-        ]
-    ];
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendContactMessage');
-    $method->setAccessible(true);
-
-    expect(fn () => $method->invoke($service, '1234567890', $contacts))
-        ->toThrow(Exception::class);
+        ]],
+    ]);
 });
 
-it('creates proper location message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+it('sends a button message', function () {
+    fakeMessageSent();
+
+    makeService()->sendButtonMessage('1234567890', 'Pick one', [
+        ['id' => 'btn1', 'title' => 'Option 1'],
+        ['title' => 'Option 2'],
+    ], 'Header', 'Footer');
+
+    Http::assertSent(fn (Request $request) => $request['interactive'] === [
+        'type' => 'button',
+        'body' => ['text' => 'Pick one'],
+        'action' => ['buttons' => [
+            ['type' => 'reply', 'reply' => ['id' => 'btn1', 'title' => 'Option 1']],
+            ['type' => 'reply', 'reply' => ['id' => 'btn_1', 'title' => 'Option 2']],
+        ]],
+        'header' => ['type' => 'text', 'text' => 'Header'],
+        'footer' => ['text' => 'Footer'],
     ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendLocationMessage');
-    $method->setAccessible(true);
-
-    expect(fn () => $method->invoke($service, '1234567890', 40.7128, -74.0060, 'New York', 'New York, NY'))
-        ->toThrow(Exception::class);
 });
 
-it('creates proper sticker message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+it('sends a list message', function () {
+    fakeMessageSent();
+    $sections = [['title' => 'Section 1', 'rows' => [['id' => 'row1', 'title' => 'Row 1']]]];
+
+    makeService()->sendListMessage('1234567890', 'Choose', 'View', $sections);
+
+    Http::assertSent(fn (Request $request) => $request['interactive'] === [
+        'type' => 'list',
+        'body' => ['text' => 'Choose'],
+        'action' => ['button' => 'View', 'sections' => $sections],
     ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendStickerMessage');
-    $method->setAccessible(true);
-
-    expect(fn () => $method->invoke($service, '1234567890', 'sticker_id_123'))
-        ->toThrow(Exception::class);
 });
 
-it('creates proper reaction message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('sends a contact message', function () {
+    fakeMessageSent();
+    $contacts = [['name' => ['formatted_name' => 'John Doe'], 'phones' => [['phone' => '+1234567890']]]];
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendReactionMessage');
-    $method->setAccessible(true);
+    makeService()->sendContactMessage('1234567890', $contacts);
 
-    expect(fn () => $method->invoke($service, '1234567890', 'message_id_123', '👍'))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) => $request['type'] === 'contacts' && $request['contacts'] === $contacts);
 });
 
-it('creates proper flow message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+it('sends a location message', function () {
+    fakeMessageSent();
+
+    makeService()->sendLocationMessage('1234567890', 40.7128, -74.006, 'New York', 'New York, NY');
+
+    Http::assertSent(fn (Request $request) => $request['location'] === [
+        'latitude' => 40.7128,
+        'longitude' => -74.006,
+        'name' => 'New York',
+        'address' => 'New York, NY',
     ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendFlowMessage');
-    $method->setAccessible(true);
-
-    $flowActionPayload = ['screen' => 'SCREEN_NAME'];
-    
-    expect(fn () => $method->invoke($service, '1234567890', 'flow_token', 'flow_id', 'Click here', 'navigate', $flowActionPayload))
-        ->toThrow(Exception::class);
 });
 
-it('creates proper single product message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('sends a sticker message', function () {
+    fakeMessageSent();
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendSingleProductMessage');
-    $method->setAccessible(true);
+    makeService()->sendStickerMessage('1234567890', 'sticker_1');
 
-    expect(fn () => $method->invoke($service, '1234567890', 'catalog_id', 'product_retailer_id', 'Check this out!'))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) => $request['sticker'] === ['id' => 'sticker_1']);
 });
 
-it('creates proper multi-product message structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('sends a reaction message', function () {
+    fakeMessageSent();
 
-    $sections = [
-        [
-            'title' => 'Products',
-            'product_items' => [
-                [
-                    'product_retailer_id' => 'product_1'
-                ]
-            ]
-        ]
-    ];
+    makeService()->sendReactionMessage('1234567890', 'wamid.1', '👍');
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendMultiProductMessage');
-    $method->setAccessible(true);
-
-    expect(fn () => $method->invoke($service, '1234567890', 'catalog_id', 'Browse Products', $sections))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) => $request['reaction'] === ['message_id' => 'wamid.1', 'emoji' => '👍']);
 });
 
-it('creates proper template message with components structure', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('sends a flow message', function () {
+    fakeMessageSent();
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('sendTemplateMessageWithComponents');
-    $method->setAccessible(true);
+    makeService()->sendFlowMessage('1234567890', 'token', 'flow_1', 'Start', 'navigate', ['screen' => 'WELCOME']);
 
-    $bodyParameters = [['type' => 'text', 'text' => 'Hello']];
-    $headerParameters = [['type' => 'text', 'text' => 'Header']];
-    $footerParameters = [['type' => 'text', 'text' => 'Footer']];
-
-    expect(fn () => $method->invoke($service, '1234567890', 'template_name', $bodyParameters, $headerParameters, $footerParameters))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) =>
+        $request['interactive']['type'] === 'flow'
+        && $request['interactive']['action']['parameters'] === [
+            'flow_token' => 'token',
+            'flow_id' => 'flow_1',
+            'flow_cta' => 'Start',
+            'flow_action' => 'navigate',
+            'flow_action_payload' => ['screen' => 'WELCOME'],
+        ]);
 });
 
-it('handles media info retrieval', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+it('sends a single product message', function () {
+    fakeMessageSent();
+
+    makeService()->sendSingleProductMessage('1234567890', 'catalog_1', 'sku_1', 'Check this out');
+
+    Http::assertSent(fn (Request $request) => $request['interactive'] === [
+        'type' => 'product',
+        'action' => ['catalog_id' => 'catalog_1', 'product_retailer_id' => 'sku_1'],
+        'body' => ['text' => 'Check this out'],
     ]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('getMediaInfo');
-    $method->setAccessible(true);
-
-    expect(fn () => $method->invoke($service, 'media_id_123'))
-        ->toThrow(Exception::class);
 });
 
-it('handles media deletion', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('marks a message as read', function () {
+    Http::fake(['*/messages' => Http::response(['success' => true])]);
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('deleteMedia');
-    $method->setAccessible(true);
+    makeService()->markMessageAsRead('wamid.1');
 
-    expect(fn () => $method->invoke($service, 'media_id_123'))
-        ->toThrow(Exception::class);
+    Http::assertSent(fn (Request $request) =>
+        $request->url() === MESSAGES_URL
+        && $request->data() === ['messaging_product' => 'whatsapp', 'status' => 'read', 'message_id' => 'wamid.1']);
 });
 
-it('handles business profile retrieval', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+// Media
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('getBusinessProfile');
-    $method->setAccessible(true);
+it('throws when uploading a missing file', function () {
+    Http::fake();
 
-    expect(fn () => $method->invoke($service))
-        ->toThrow(Exception::class);
+    expect(fn () => makeService()->uploadMedia(sys_get_temp_dir() . '/non-existent-file.jpg', 'image/jpeg'))
+        ->toThrow(WhatsappException::class, 'File not found');
+
+    Http::assertNothingSent();
 });
 
-it('handles business profile update', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
-    ]);
+it('uploads media', function () {
+    Http::fake(['*/media' => Http::response(['id' => 'media_1'])]);
+    $file = tempnam(sys_get_temp_dir(), 'wa') . '.jpg';
+    file_put_contents($file, 'binary');
 
-    $profileData = [
-        'messaging_product' => 'whatsapp',
-        'about' => 'Test business'
-    ];
+    $response = makeService()->uploadMedia($file, 'image/jpeg');
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('updateBusinessProfile');
-    $method->setAccessible(true);
-
-    expect(fn () => $method->invoke($service, $profileData))
-        ->toThrow(Exception::class);
+    expect($response['id'])->toBe('media_1');
+    Http::assertSent(fn (Request $request) =>
+        $request->url() === 'https://graph.facebook.com/v20.0/123456789/media' && $request->isMultipart());
+    unlink($file);
 });
 
-it('handles mark message as read', function () {
-    $service = new WhatsappService([
-        'phone_number_id' => '123456789',
-        'access_token' => 'test_token',
-        'base_uri' => 'https://graph.facebook.com/v20.0',
-        'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
-        'tenants' => []
+it('gets media info', function () {
+    Http::fake(['*/media_1' => Http::response(['id' => 'media_1', 'mime_type' => 'image/png'])]);
+
+    expect(makeService()->getMediaInfo('media_1'))->toMatchArray(['mime_type' => 'image/png']);
+});
+
+it('downloads media using the extension for its mime type', function () {
+    $storage = sys_get_temp_dir() . '/whatsapp-test-' . uniqid();
+    Http::fake([
+        'https://graph.facebook.com/v20.0/media_1' => Http::response(['url' => 'https://lookaside.fbsbx.com/file', 'mime_type' => 'application/pdf']),
+        'https://lookaside.fbsbx.com/file' => Http::response('pdf-bytes'),
     ]);
 
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('markMessageAsRead');
-    $method->setAccessible(true);
+    $path = makeService(['media_storage' => $storage])->downloadMedia('media_1');
 
-    expect(fn () => $method->invoke($service, 'message_id_123'))
-        ->toThrow(Exception::class);
+    expect($path)->toBe("{$storage}/media_1.pdf");
+    expect(file_get_contents($path))->toBe('pdf-bytes');
+    unlink($path);
+    rmdir($storage);
+});
+
+it('deletes media', function () {
+    Http::fake(['*/media_1' => Http::response(['success' => true])]);
+
+    expect(makeService()->deleteMedia('media_1'))->toBeTrue();
+    Http::assertSent(fn (Request $request) => $request->method() === 'DELETE');
+});
+
+it('uses the correct tenant credentials for each media call', function () {
+    Http::fake(['*' => Http::response(['id' => 'media_1'])]);
+    $service = tenantService();
+
+    $service->getMediaInfo('media_1', 'tenant1');
+    $service->getMediaInfo('media_1');
+
+    $requests = Http::recorded();
+    expect($requests[0][0]->header('Authorization'))->toBe(['Bearer tenant_token']);
+    expect($requests[1][0]->header('Authorization'))->toBe(['Bearer test_token']);
+});
+
+it('sends custom headers with media requests', function () {
+    Http::fake(['*' => Http::response(['id' => 'media_1'])]);
+
+    makeService()->getMediaInfo('media_1', null, ['X-Request-ID' => 'req123']);
+
+    Http::assertSent(fn (Request $request) => $request->hasHeader('X-Request-ID', 'req123'));
+});
+
+// Business profile
+
+it('gets the business profile', function () {
+    Http::fake(['*/whatsapp_business_profile*' => Http::response(['data' => [['about' => 'Hi']]])]);
+
+    expect(makeService()->getBusinessProfile()['data'][0]['about'])->toBe('Hi');
+});
+
+it('updates the business profile', function () {
+    Http::fake(['*/whatsapp_business_profile' => Http::response(['success' => true])]);
+
+    makeService()->updateBusinessProfile(['messaging_product' => 'whatsapp', 'about' => 'Test business']);
+
+    Http::assertSent(fn (Request $request) =>
+        $request->method() === 'POST' && $request['about'] === 'Test business');
+});
+
+it('uses the correct tenant credentials for each business profile call', function () {
+    Http::fake(['*' => Http::response(['data' => []])]);
+    $service = tenantService();
+
+    $service->getBusinessProfile('tenant1');
+    $service->getBusinessProfile();
+
+    $requests = Http::recorded();
+    expect($requests[0][0]->url())->toStartWith('https://graph.facebook.com/v20.0/tenant_phone/');
+    expect($requests[1][0]->url())->toStartWith('https://graph.facebook.com/v20.0/123456789/');
+});
+
+it('throws when a media download fails', function () {
+    Http::fake([
+        'https://graph.facebook.com/v20.0/media_1' => Http::response(['url' => 'https://lookaside.fbsbx.com/file', 'mime_type' => 'image/png']),
+        'https://lookaside.fbsbx.com/file' => Http::response('Not found', 404),
+    ]);
+
+    expect(fn () => makeService()->downloadMedia('media_1'))
+        ->toThrow(WhatsappException::class, 'Failed to download media');
+});
+
+// Template and product payloads
+
+it('sends a template message with text and media parameters', function () {
+    fakeMessageSent();
+
+    makeService()->sendTemplateMessageWithComponents(
+        '1234567890',
+        'order_shipped',
+        ['John', ['type' => 'currency', 'currency' => ['fallback_value' => '$10', 'code' => 'USD', 'amount_1000' => 10000]]],
+        [['type' => 'image', 'image' => ['link' => 'https://example.com/box.jpg']]]
+    );
+
+    Http::assertSent(fn (Request $request) => $request['template']['components'] === [
+        ['type' => 'header', 'parameters' => [
+            ['type' => 'image', 'image' => ['link' => 'https://example.com/box.jpg']],
+        ]],
+        ['type' => 'body', 'parameters' => [
+            ['type' => 'text', 'text' => 'John'],
+            ['type' => 'currency', 'currency' => ['fallback_value' => '$10', 'code' => 'USD', 'amount_1000' => 10000]],
+        ]],
+    ]);
+});
+
+it('rejects template footer parameters', function () {
+    Http::fake();
+
+    expect(fn () => makeService()->sendTemplateMessageWithComponents('1234567890', 'tpl', [], [], ['Footer']))
+        ->toThrow(WhatsappException::class, 'Template footers do not accept parameters');
+
+    Http::assertNothingSent();
+});
+
+it('sends a multi-product message with header and body', function () {
+    fakeMessageSent();
+    $sections = [['title' => 'Products', 'product_items' => [['product_retailer_id' => 'sku_1']]]];
+
+    makeService()->sendMultiProductMessage('1234567890', 'catalog_1', 'Browse our range', $sections, 'Our products');
+
+    Http::assertSent(fn (Request $request) => $request['interactive'] === [
+        'type' => 'product_list',
+        'header' => ['type' => 'text', 'text' => 'Our products'],
+        'body' => ['text' => 'Browse our range'],
+        'action' => ['catalog_id' => 'catalog_1', 'sections' => $sections],
+    ]);
+});
+
+it('requires a header for multi-product messages', function () {
+    Http::fake();
+
+    expect(fn () => makeService()->sendMultiProductMessage('1234567890', 'catalog_1', 'Browse', []))
+        ->toThrow(WhatsappException::class, 'Multi-product messages require header text');
+});
+
+it('builds template payloads with the template builder', function () {
+    $payload = makeService()->template('order_update')
+        ->header([['type' => 'document', 'document' => ['id' => 'doc_1']]])
+        ->body(['John', 42])
+        ->button('url', ['track/123'], 1)
+        ->build();
+
+    expect($payload['template'])->toBe([
+        'name' => 'order_update',
+        'language' => ['code' => 'en_US'],
+        'components' => [
+            ['type' => 'header', 'parameters' => [['type' => 'document', 'document' => ['id' => 'doc_1']]]],
+            ['type' => 'body', 'parameters' => [['type' => 'text', 'text' => 'John'], ['type' => 'text', 'text' => '42']]],
+            ['type' => 'button', 'sub_type' => 'url', 'index' => '1', 'parameters' => [['type' => 'text', 'text' => 'track/123']]],
+        ],
+    ]);
+});
+
+it('detects the MIME type when uploading with a media category', function () {
+    Http::fake(['*/media' => Http::response(['id' => 'media_1'])]);
+    $file = sys_get_temp_dir() . '/wa-' . uniqid() . '.png';
+    file_put_contents($file, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAMAASsJTYQAAAAASUVORK5CYII='));
+
+    makeService()->uploadMedia($file, 'image');
+
+    Http::assertSent(fn (Request $request) => collect($request->data())
+        ->contains(fn ($part) => $part['name'] === 'type' && $part['contents'] === 'image/png'));
+    unlink($file);
+});
+
+it('requests business profile fields and sends messaging_product on update', function () {
+    Http::fake(['*' => Http::response(['success' => true])]);
+    $service = makeService();
+
+    $service->getBusinessProfile();
+    $service->updateBusinessProfile(['about' => 'Hello']);
+
+    $requests = Http::recorded();
+    expect($requests[0][0]->url())->toContain('fields=about%2Caddress%2Cdescription%2Cemail%2Cprofile_picture_url%2Cwebsites%2Cvertical');
+    expect($requests[1][0]->data())->toBe(['messaging_product' => 'whatsapp', 'about' => 'Hello']);
 });

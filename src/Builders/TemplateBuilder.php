@@ -2,6 +2,8 @@
 
 namespace Crenspire\Whatsapp\Builders;
 
+use Crenspire\Whatsapp\Exceptions\WhatsappException;
+
 /**
  * WhatsApp Template Builder
  *
@@ -41,7 +43,7 @@ class TemplateBuilder
     {
         $this->components[] = [
             'type' => 'header',
-            'parameters' => $this->formatParameters($parameters)
+            'parameters' => self::parameters($parameters)
         ];
 
         return $this;
@@ -57,7 +59,7 @@ class TemplateBuilder
     {
         $this->components[] = [
             'type' => 'body',
-            'parameters' => $this->formatParameters($parameters)
+            'parameters' => self::parameters($parameters)
         ];
 
         return $this;
@@ -66,32 +68,31 @@ class TemplateBuilder
     /**
      * Add footer component
      *
+     * @deprecated Template footers are static text and take no parameters when sending
      * @param array $parameters The footer parameters
      * @return self
+     * @throws WhatsappException Always, since the API rejects footer parameters
      */
     public function footer(array $parameters): self
     {
-        $this->components[] = [
-            'type' => 'footer',
-            'parameters' => $this->formatParameters($parameters)
-        ];
-
-        return $this;
+        throw new WhatsappException("Template footers do not accept parameters");
     }
 
     /**
      * Add button component
      *
-     * @param string $subType The button sub-type
+     * @param string $subType The button sub-type (quick_reply, url, ...)
      * @param array $parameters The button parameters
+     * @param int $index The zero-based position of the button in the template
      * @return self
      */
-    public function button(string $subType, array $parameters): self
+    public function button(string $subType, array $parameters, int $index = 0): self
     {
         $this->components[] = [
             'type' => 'button',
             'sub_type' => $subType,
-            'parameters' => $this->formatParameters($parameters)
+            'index' => (string) $index,
+            'parameters' => self::parameters($parameters)
         ];
 
         return $this;
@@ -117,24 +118,25 @@ class TemplateBuilder
     /**
      * Format parameters for template components
      *
+     * Plain values become text parameters. Arrays are passed through as full
+     * parameter objects, e.g. ['type' => 'image', 'image' => ['id' => '...']],
+     * with the type defaulting to text.
+     *
      * @param array $parameters The raw parameters
      * @return array The formatted parameters
      */
-    private function formatParameters(array $parameters): array
+    public static function parameters(array $parameters): array
     {
-        return array_map(function($param) {
+        return array_map(function ($param) {
             if (is_array($param)) {
-                return [
-                    'type' => $param['type'] ?? 'text',
-                    'text' => $param['text'] ?? $param
-                ];
+                return isset($param['type']) ? $param : ['type' => 'text'] + $param;
             }
 
             return [
                 'type' => 'text',
-                'text' => $param
+                'text' => (string) $param
             ];
-        }, $parameters);
+        }, array_values($parameters));
     }
 
     /**

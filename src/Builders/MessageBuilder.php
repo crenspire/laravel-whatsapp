@@ -2,6 +2,8 @@
 
 namespace Crenspire\Whatsapp\Builders;
 
+use Crenspire\Whatsapp\Exceptions\WhatsappException;
+
 /**
  * WhatsApp Message Builder
  *
@@ -313,26 +315,28 @@ class MessageBuilder
      * Build a multi-product interactive message
      *
      * @param string $catalogId The catalog ID
-     * @param string $buttonText The button text
+     * @param string $buttonText The body text shown above the product list
      * @param array $sections The product sections
-     * @param string|null $headerText Optional header text
+     * @param string|null $headerText Header text (required by the API)
      * @param string|null $footerText Optional footer text
      * @return array The interactive message payload
+     * @throws WhatsappException When the header text is missing
      */
     public static function multiProductInteractive(string $catalogId, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null): array
     {
+        if (!$headerText) {
+            throw new WhatsappException("Multi-product messages require header text");
+        }
+
         $interactive = [
             'type' => 'product_list',
+            'header' => ['type' => 'text', 'text' => $headerText],
             'body' => ['text' => $buttonText],
             'action' => [
                 'catalog_id' => $catalogId,
                 'sections' => $sections
             ]
         ];
-
-        if ($headerText) {
-            $interactive['header'] = ['type' => 'text', 'text' => $headerText];
-        }
 
         if ($footerText) {
             $interactive['footer'] = ['text' => $footerText];

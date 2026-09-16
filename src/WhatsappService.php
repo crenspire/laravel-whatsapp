@@ -12,6 +12,7 @@ use Crenspire\Whatsapp\Builders\MessageBuilder;
 use Crenspire\Whatsapp\Builders\TemplateBuilder;
 use Crenspire\Whatsapp\Managers\MediaManager;
 use Crenspire\Whatsapp\Managers\BusinessProfileManager;
+use Crenspire\Whatsapp\Managers\TemplateManager;
 
 /**
  * WhatsApp Business Cloud API Service
@@ -34,20 +35,6 @@ class WhatsappService
     protected array $config;
 
     /**
-     * Media manager instance
-     *
-     * @var MediaManager|null
-     */
-    protected ?MediaManager $mediaManager = null;
-
-    /**
-     * Business profile manager instance
-     *
-     * @var BusinessProfileManager|null
-     */
-    protected ?BusinessProfileManager $businessProfileManager = null;
-
-    /**
      * Create a new WhatsApp service instance
      *
      * @param array $config The service configuration array
@@ -68,24 +55,32 @@ class WhatsappService
      *
      * @param string|null $tenantId The tenant ID to get configuration for
      * @return array The tenant configuration array
+     * @throws WhatsappException When the tenant ID is not configured
      */
     protected function tenantConfig(?string $tenantId = null): array
     {
-        if ($tenantId && isset($this->config['tenants'][$tenantId])) {
+        if ($tenantId !== null) {
+            // Never fall back to the default account for an unknown tenant
+            if (!isset($this->config['tenants'][$tenantId])) {
+                throw new WhatsappException("Unknown WhatsApp tenant: {$tenantId}");
+            }
+
             $tenant = $this->config['tenants'][$tenantId];
             return [
                 'phone_number_id' => $tenant['phone_number_id'],
                 'access_token' => $tenant['access_token'],
+                'business_account_id' => $tenant['business_account_id'] ?? $this->config['business_account_id'] ?? null,
                 'headers' => $tenant['headers'] ?? [],
-                'language' => $tenant['language'] ?? $this->config['default_language'] ?? 'en-US',
+                'language' => $tenant['language'] ?? $this->config['default_language'] ?? 'en_US',
             ];
         }
 
         return [
             'phone_number_id' => $this->config['phone_number_id'],
             'access_token'    => $this->config['access_token'],
+            'business_account_id' => $this->config['business_account_id'] ?? null,
             'headers' => [],
-            'language' => $this->config['default_language'] ?? 'en-US',
+            'language' => $this->config['default_language'] ?? 'en_US',
         ];
     }
 
@@ -121,7 +116,7 @@ class WhatsappService
      */
     protected function getLanguage(array $tenantConfig, ?string $customLanguage = null): string
     {
-        return $customLanguage ?? $tenantConfig['language'] ?? $this->config['default_language'] ?? 'en-US';
+        return $customLanguage ?? $tenantConfig['language'] ?? $this->config['default_language'] ?? 'en_US';
     }
 
     /**
@@ -134,7 +129,7 @@ class WhatsappService
      * @param array $message The message payload array
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
      * @param array $customHeaders Optional custom headers for this request
-     * @param string|null $language Optional language override (ISO 639-1 format)
+     * @param string|null $language Optional language override (Meta language code, e.g. en_US)
      * @return array The API response data
      * @throws WhatsappException When rate limit is exceeded or API call fails
      */
@@ -241,7 +236,7 @@ class WhatsappService
         if (!empty($parameters)) {
             $components[] = [
                 'type' => 'body',
-                'parameters' => array_map(fn($param) => ['type' => 'text', 'text' => $param], $parameters)
+                'parameters' => TemplateBuilder::parameters($parameters)
             ];
         }
 
@@ -260,51 +255,39 @@ class WhatsappService
      *
      * @param string $to The recipient phone number (with country code)
      * @param string $templateName The name of the approved template
+     * Parameters may be plain strings (sent as text) or full parameter arrays,
+     * e.g. ['type' => 'image', 'image' => ['link' => 'https://...']] for a media header.
+     *
      * @param array $bodyParameters Optional body parameters to fill template placeholders
-     * @param array $headerParameters Optional header parameters (for media templates)
-     * @param array $footerParameters Optional footer parameters
+     * @param array $headerParameters Optional header parameters (text or media)
+     * @param array $footerParameters Not supported: template footers take no parameters
      * @param string|null $language The language code
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
      * @return array The API response data
-     * @throws WhatsappException When rate limit is exceeded or API call fails
+     * @throws WhatsappException When footer parameters are given, rate limit is exceeded or API call fails
      */
     public function sendTemplateMessageWithComponents(string $to, string $templateName, array $bodyParameters = [], array $headerParameters = [], array $footerParameters = [], ?string $language = null, ?string $tenantId = null, array $customHeaders = []): array
     {
         $tenant = $this->tenantConfig($tenantId);
         $language = $this->getLanguage($tenant, $language);
         
+        if (!empty($footerParameters)) {
+            throw new WhatsappException("Template footers do not accept parameters");
+        }
+
         $components = [];
 
-        // Add header component if parameters provided
         if (!empty($headerParameters)) {
             $components[] = [
                 'type' => 'header',
-                'parameters' => array_map(fn($param) => [
-                    'type' => $param['type'] ?? 'text',
-                    'text' => $param['text'] ?? $param
-                ], $headerParameters)
+                'parameters' => TemplateBuilder::parameters($headerParameters)
             ];
         }
 
-        // Add body component if parameters provided
         if (!empty($bodyParameters)) {
             $components[] = [
                 'type' => 'body',
-                'parameters' => array_map(fn($param) => [
-                    'type' => $param['type'] ?? 'text',
-                    'text' => $param['text'] ?? $param
-                ], $bodyParameters)
-            ];
-        }
-
-        // Add footer component if parameters provided
-        if (!empty($footerParameters)) {
-            $components[] = [
-                'type' => 'footer',
-                'parameters' => array_map(fn($param) => [
-                    'type' => $param['type'] ?? 'text',
-                    'text' => $param['text'] ?? $param
-                ], $footerParameters)
+                'parameters' => TemplateBuilder::parameters($bodyParameters)
             ];
         }
 
@@ -582,32 +565,17 @@ class WhatsappService
      *
      * @param string $to The recipient phone number (with country code)
      * @param string $catalogId The catalog ID
-     * @param string $buttonText The button text
+     * @param string $buttonText The body text shown above the product list
      * @param array $sections Array of product sections
-     * @param string|null $headerText Optional header text
+     * @param string|null $headerText Header text (required by the API)
      * @param string|null $footerText Optional footer text
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
      * @return array The API response data
-     * @throws WhatsappException When rate limit is exceeded or API call fails
+     * @throws WhatsappException When the header is missing, rate limit is exceeded or API call fails
      */
     public function sendMultiProductMessage(string $to, string $catalogId, string $buttonText, array $sections, ?string $headerText = null, ?string $footerText = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
     {
-        $interactive = [
-            'type' => 'product_list',
-            'body' => ['text' => $buttonText],
-            'action' => [
-                'catalog_id' => $catalogId,
-                'sections' => $sections
-            ]
-        ];
-
-        if ($headerText) {
-            $interactive['header'] = ['type' => 'text', 'text' => $headerText];
-        }
-
-        if ($footerText) {
-            $interactive['footer'] = ['text' => $footerText];
-        }
+        $interactive = MessageBuilder::multiProductInteractive($catalogId, $buttonText, $sections, $headerText, $footerText);
 
         return $this->sendInteractiveMessage($to, $interactive, $tenantId, $customHeaders, $language);
     }
@@ -616,14 +584,14 @@ class WhatsappService
      * Upload media file to WhatsApp
      *
      * @param string $filePath The local file path to upload
-     * @param string $type The media type (image, video, document, audio)
+     * @param string $type The MIME type (e.g. image/jpeg); a bare category like "image" is detected from the file
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
      * @return array The API response data containing media ID
      * @throws WhatsappException When file not found or upload fails
      */
     public function uploadMedia(string $filePath, string $type, ?string $tenantId = null, array $customHeaders = []): array
     {
-        $mediaManager = $this->getMediaManager($tenantId);
+        $mediaManager = $this->getMediaManager($tenantId, $customHeaders);
         return $mediaManager->upload($filePath, $type);
     }
 
@@ -637,7 +605,7 @@ class WhatsappService
      */
     public function downloadMedia(string $mediaId, ?string $tenantId = null, array $customHeaders = []): string
     {
-        $mediaManager = $this->getMediaManager($tenantId);
+        $mediaManager = $this->getMediaManager($tenantId, $customHeaders);
         return $mediaManager->download($mediaId);
     }
 
@@ -651,7 +619,7 @@ class WhatsappService
      */
     public function getMediaInfo(string $mediaId, ?string $tenantId = null, array $customHeaders = []): array
     {
-        $mediaManager = $this->getMediaManager($tenantId);
+        $mediaManager = $this->getMediaManager($tenantId, $customHeaders);
         return $mediaManager->getInfo($mediaId);
     }
 
@@ -665,7 +633,7 @@ class WhatsappService
      */
     public function deleteMedia(string $mediaId, ?string $tenantId = null, array $customHeaders = []): bool
     {
-        $mediaManager = $this->getMediaManager($tenantId);
+        $mediaManager = $this->getMediaManager($tenantId, $customHeaders);
         return $mediaManager->delete($mediaId);
     }
 
@@ -678,7 +646,7 @@ class WhatsappService
      */
     public function getBusinessProfile(?string $tenantId = null, array $customHeaders = []): array
     {
-        $businessProfileManager = $this->getBusinessProfileManager($tenantId);
+        $businessProfileManager = $this->getBusinessProfileManager($tenantId, $customHeaders);
         return $businessProfileManager->get();
     }
 
@@ -692,7 +660,7 @@ class WhatsappService
      */
     public function updateBusinessProfile(array $profileData, ?string $tenantId = null, array $customHeaders = []): array
     {
-        $businessProfileManager = $this->getBusinessProfileManager($tenantId);
+        $businessProfileManager = $this->getBusinessProfileManager($tenantId, $customHeaders);
         return $businessProfileManager->update($profileData);
     }
 
@@ -752,81 +720,43 @@ class WhatsappService
     }
 
     /**
-     * Get file extension from MIME type
+     * Get a media manager for the given tenant
      *
-     * @param string $mimeType The MIME type to convert
-     * @return string The corresponding file extension
-     */
-    protected function getFileExtensionFromMimeType(string $mimeType): string
-    {
-        $mimeToExt = [
-            'image/jpeg' => 'jpg',
-            'image/png' => 'png',
-            'image/gif' => 'gif',
-            'image/webp' => 'webp',
-            'video/mp4' => 'mp4',
-            'video/3gpp' => '3gp',
-            'audio/aac' => 'aac',
-            'audio/mp4' => 'm4a',
-            'audio/mpeg' => 'mp3',
-            'audio/amr' => 'amr',
-            'audio/ogg' => 'ogg',
-            'application/pdf' => 'pdf',
-            'application/vnd.ms-powerpoint' => 'ppt',
-            'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
-            'application/msword' => 'doc',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
-            'application/vnd.ms-excel' => 'xls',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
-            'text/plain' => 'txt',
-        ];
-
-        return $mimeToExt[$mimeType] ?? 'bin';
-    }
-
-    /**
-     * Get media manager instance
+     * Managers are built per call so each request uses the credentials of
+     * the tenant it was made for.
      *
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @param array $customHeaders Custom headers for this request
      * @return MediaManager The media manager instance
      */
-    protected function getMediaManager(?string $tenantId = null): MediaManager
+    protected function getMediaManager(?string $tenantId = null, array $customHeaders = []): MediaManager
     {
-        if ($this->mediaManager === null) {
-            $tenant = $this->tenantConfig($tenantId);
-            $headers = $this->buildHeaders($tenant);
-            
-            $this->mediaManager = new MediaManager(
-                $this->config['base_uri'],
-                $tenant['phone_number_id'],
-                $headers,
-                $this->config['media_storage']
-            );
-        }
+        $tenant = $this->tenantConfig($tenantId);
 
-        return $this->mediaManager;
+        return new MediaManager(
+            $this->config['base_uri'],
+            $tenant['phone_number_id'],
+            $this->buildHeaders($tenant, $customHeaders),
+            $this->config['media_storage']
+        );
     }
 
     /**
-     * Get business profile manager instance
+     * Get a business profile manager for the given tenant
      *
      * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @param array $customHeaders Custom headers for this request
      * @return BusinessProfileManager The business profile manager instance
      */
-    protected function getBusinessProfileManager(?string $tenantId = null): BusinessProfileManager
+    protected function getBusinessProfileManager(?string $tenantId = null, array $customHeaders = []): BusinessProfileManager
     {
-        if ($this->businessProfileManager === null) {
-            $tenant = $this->tenantConfig($tenantId);
-            $headers = $this->buildHeaders($tenant);
-            
-            $this->businessProfileManager = new BusinessProfileManager(
-                $this->config['base_uri'],
-                $tenant['phone_number_id'],
-                $headers
-            );
-        }
+        $tenant = $this->tenantConfig($tenantId);
 
-        return $this->businessProfileManager;
+        return new BusinessProfileManager(
+            $this->config['base_uri'],
+            $tenant['phone_number_id'],
+            $this->buildHeaders($tenant, $customHeaders)
+        );
     }
 
     /**
@@ -853,5 +783,189 @@ class WhatsappService
     public function message(): MessageBuilder
     {
         return new MessageBuilder();
+    }
+
+    /**
+     * Get template manager instance
+     *
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return TemplateManager The template manager instance
+     * @throws WhatsappException When no business account ID is configured
+     */
+    protected function getTemplateManager(?string $tenantId = null): TemplateManager
+    {
+        $tenant = $this->tenantConfig($tenantId);
+
+        if (empty($tenant['business_account_id'])) {
+            throw new WhatsappException("Business Account ID is required for template management");
+        }
+
+        return new TemplateManager(
+            $this->config['base_uri'],
+            $tenant['business_account_id'],
+            $this->buildHeaders($tenant)
+        );
+    }
+
+    /**
+     * Create a new message template
+     *
+     * @param string $name The template name
+     * @param string $language The language code (e.g., 'en_US')
+     * @param string $category The template category (MARKETING, UTILITY, AUTHENTICATION)
+     * @param array $components The template components
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The API response data
+     * @throws WhatsappException When template creation fails
+     */
+    public function createTemplate(string $name, string $language, string $category, array $components, ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->create($name, $language, $category, $components);
+    }
+
+    /**
+     * Edit an existing message template
+     *
+     * The template is found by name and language, and re-submitted for review.
+     *
+     * @param string $name The template name
+     * @param string $language The language code of the version to edit
+     * @param string $category The template category
+     * @param array $components The updated template components
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The API response data
+     * @throws WhatsappException When template update fails
+     */
+    public function updateTemplate(string $name, string $language, string $category, array $components, ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->update($name, $language, $category, $components);
+    }
+
+    /**
+     * Delete a message template
+     *
+     * @param string $name The template name
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return bool True if deletion was successful
+     * @throws WhatsappException When template deletion fails
+     */
+    public function deleteTemplate(string $name, ?string $tenantId = null): bool
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->delete($name);
+    }
+
+    /**
+     * Get all message templates
+     *
+     * @param array $filters Optional filters (status, category, language)
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The API response data
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function getTemplates(array $filters = [], ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->getAll($filters);
+    }
+
+    /**
+     * Get a specific template by name
+     *
+     * @param string $name The template name
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The template data
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function getTemplate(string $name, ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->getByName($name);
+    }
+
+    /**
+     * Get templates by status
+     *
+     * @param string $status The template status (APPROVED, PENDING, REJECTED, PAUSED, DISABLED, ...)
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The filtered templates
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function getTemplatesByStatus(string $status, ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->getByStatus($status);
+    }
+
+    /**
+     * Get templates by category
+     *
+     * @param string $category The template category
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The filtered templates
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function getTemplatesByCategory(string $category, ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->getByCategory($category);
+    }
+
+    /**
+     * Get templates by language
+     *
+     * @param string $language The language code
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return array The filtered templates
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function getTemplatesByLanguage(string $language, ?string $tenantId = null): array
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->getByLanguage($language);
+    }
+
+    /**
+     * Get template status
+     *
+     * @param string $name The template name
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return string The template status
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function getTemplateStatus(string $name, ?string $tenantId = null): string
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->getStatus($name);
+    }
+
+    /**
+     * Check if template is approved
+     *
+     * @param string $name The template name
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return bool True if template is approved
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function isTemplateApproved(string $name, ?string $tenantId = null): bool
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->isApproved($name);
+    }
+
+    /**
+     * Check if template is pending
+     *
+     * @param string $name The template name
+     * @param string|null $tenantId Optional tenant ID for multi-tenant setups
+     * @return bool True if template is pending
+     * @throws WhatsappException When template retrieval fails
+     */
+    public function isTemplatePending(string $name, ?string $tenantId = null): bool
+    {
+        $templateManager = $this->getTemplateManager($tenantId);
+        return $templateManager->isPending($name);
     }
 }

@@ -8,6 +8,8 @@ return [
 
     'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
 
+    'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+
     'webhook_verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
 
     'webhook_secret' => env('WHATSAPP_WEBHOOK_SECRET'),
@@ -19,16 +21,17 @@ return [
         'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
     ],
 
-    // Default language for messages (ISO 639-1 format)
-    'default_language' => env('WHATSAPP_DEFAULT_LANGUAGE', 'en-US'),
+    // Default template language (Meta language code, e.g. en_US, en, pt_BR)
+    'default_language' => env('WHATSAPP_DEFAULT_LANGUAGE', 'en_US'),
 
     // Per-tenant routing
     'tenants' => [
         // 'tenant_id' => [
         //     'phone_number_id' => '...', 
         //     'access_token' => '...',
+        //     'business_account_id' => '...', // Optional business account ID per tenant
         //     'headers' => ['Custom-Header' => 'value'], // Optional custom headers per tenant
-        //     'language' => 'es-ES' // Optional language override per tenant
+        //     'language' => 'es_ES' // Optional language override per tenant
         // ],
     ],
 
