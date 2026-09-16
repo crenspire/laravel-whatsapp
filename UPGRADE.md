@@ -67,6 +67,22 @@ In 2.x, if `WHATSAPP_WEBHOOK_VERIFY_TOKEN` was not set, a verification request w
 
 Webhooks received while `WHATSAPP_WEBHOOK_SECRET` is empty still work, but log a warning. Set it to your Meta App Secret to verify request signatures.
 
+### Failures throw more specific exceptions
+
+API failures now throw a subclass of `WhatsappException`, such as `CustomerServiceWindowException` or `RateLimitException`. Code that catches `WhatsappException` keeps working. The exception message now reads `Failed to <action>: <Meta's message> (<details>)`, so update anything that matches on the old message text.
+
+### Requests are retried
+
+Requests that fail for a temporary reason (rate limits, connection errors and server errors) are now attempted up to 3 times. Message sends are only retried when Meta confirms the attempt failed, so a retry won't deliver a message twice. To keep the old behavior, set `WHATSAPP_RETRY_TIMES=1`.
+
+### Duplicate webhook events are skipped
+
+Events for a message or status that was already processed in the last 24 hours are no longer dispatched again. This uses your default cache store. If you deduplicate in your own listeners, you can remove that code, or set `WHATSAPP_WEBHOOK_DEDUPLICATE=false`.
+
+### `MessageReceived::$from` can be a user ID
+
+WhatsApp users can hide their phone number behind a username. Messages from them used to be ignored; they're now dispatched with the business-scoped user ID in `$from`. Check `$event->hasPhoneNumber()` before treating `$from` as a phone number.
+
 ### Smaller changes
 
 - **Media uploads:** `uploadMedia()` sent a JSON content type with multipart data, which the API rejected. Uploads now work. The `$type` argument should be a MIME type such as `image/jpeg`; a category like `image` is converted using the file's detected type.
@@ -75,7 +91,23 @@ Webhooks received while `WHATSAPP_WEBHOOK_SECRET` is empty still work, but log a
 - **`MessageFailed` event:** has a new optional `$messageId` property. It's also dispatched when a webhook reports a failed delivery, so listeners may now receive failures that happen after sending.
 - **Logging:** webhook payloads are only logged in full when `WHATSAPP_DEBUG` is `true`, because they contain message contents.
 - **`BusinessProfileManager::updateWebsite()`** sent the wrong field name and had no effect. It now updates the website.
+- **Local rate limit:** exceeding `WHATSAPP_RATE_LIMIT` throws `RateLimitException` with code 429 (previously code 0).
 
-### If you extend `WhatsappService`
+### If you extend `WhatsappService` or use the managers directly
 
 Managers are no longer cached on the service, so the protected `$mediaManager` and `$businessProfileManager` properties were removed. `getMediaManager()` and `getBusinessProfileManager()` take an extra `$customHeaders` argument. The unused protected `getFileExtensionFromMimeType()` method was removed. The same helper still exists privately on `MediaManager`.
+
+`MediaManager`, `BusinessProfileManager` and `TemplateManager` now take a `Crenspire\Whatsapp\Http\GraphClient` instead of an array of headers:
+
+```php
+use Crenspire\Whatsapp\Http\GraphClient;
+
+$client = GraphClient::fromConfig(config('whatsapp'), ['Authorization' => 'Bearer '.$token]);
+$media = new MediaManager($baseUri, $phoneNumberId, $client, $storagePath);
+```
+
+`sendMessage()` and the send helpers have a new optional `$replyTo` argument at the end. If you override them, add it to your signatures.
+
+### New config options
+
+Republish the config file, or add the new options by hand: `app_id`, `webhook`, `timeout`, `retry` and `message_log`. All have defaults, so this is only needed if you want to change them.

@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to upgrade from 2.x.
 
 ### Added
+- Notification channel: return a `WhatsappMessage` from `toWhatsapp()` and send with `$notifiable->notify()`
+- `Whatsapp::fake()` with assertions such as `assertSentText()`, `assertSentTemplate()` and `assertSentTo()`
+- An exception class for each kind of API failure (`CustomerServiceWindowException`, `RateLimitException`, `TemplateException` and more), with Meta's error code, details and trace ID
+- Automatic retries with exponential backoff for rate limits and temporary errors, configured with `retry.times` and `retry.sleep`
+- Webhook duplicate filtering using the cache, configured under `webhook`
+- `MessageStatusUpdated`, `TemplateStatusUpdated` and `TemplateQualityUpdated` events
+- Helpers on `MessageReceived`: `text()`, `buttonReplyId()`, `listReplyId()`, `buttonPayload()`, `flowResponse()`, `mediaId()`, `replyToMessageId()`, `senderName()` and more
+- Replies that quote a message, with the `replyTo` argument on every send method except reactions
+- `showTypingIndicator()`
+- `uploadTemplateMedia()` to upload sample media for template headers, using the new `app_id` config option
+- Optional message log: a publishable migration, the `Message` model, and status tracking from webhooks
+- `whatsapp:check`, `whatsapp:test` and `whatsapp:templates` Artisan commands
+- `getPhoneNumber()` and `getWebhookSubscriptions()`
+- Events carry the phone number ID, and `MessageSent`/`MessageFailed` carry the payload and tenant
+- Messages from users who hide their phone number are handled using their business-scoped user ID
 - Laravel 13 support is now tested in CI
 - Template management: create, edit, delete, list, and status checks
 - `MessageFailed` is dispatched for `failed` webhook statuses, with the message ID
@@ -20,6 +35,10 @@ This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to 
 
 ### Changed
 - Requires Laravel 12 or 13, and Carbon 3
+- API failures throw subclasses of `WhatsappException`, and messages include Meta's error details
+- Temporary failures are retried by default (3 attempts). Message sends are only retried when Meta confirms they failed
+- Webhook events delivered more than once are dispatched once
+- Media, business profile and template managers take a `GraphClient` instead of a headers array
 - Unknown tenant IDs throw `WhatsappException` instead of silently using the default account
 - `default_language` defaults to `en_US` (Meta language codes use underscores)
 - `sendMultiProductMessage()` requires header text, as the API does
@@ -28,6 +47,7 @@ This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to 
 - Webhooks received without a configured `webhook_secret` log a warning
 
 ### Fixed
+- The package couldn't be installed in new Laravel 13 apps, which use Guzzle 8. The package no longer requires Guzzle directly; it uses the version Laravel's HTTP client requires
 - Media, business profile, and template calls reused the first tenant's credentials for every tenant
 - Tenant-specific `business_account_id` was ignored
 - Media uploads were sent with a JSON Content-Type and rejected
