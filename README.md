@@ -6,6 +6,8 @@
 
 Send and receive WhatsApp messages from Laravel using Meta's [WhatsApp Business Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api).
 
+**Documentation: [crenspire.github.io/laravel-whatsapp](https://crenspire.github.io/laravel-whatsapp/)**
+
 ```php
 use Crenspire\Whatsapp\Facades\Whatsapp;
 
@@ -638,7 +640,7 @@ composer analyse    # PHPStan
 composer format     # Pint
 ```
 
-More documentation is in the [docs](docs) folder, including the [API reference](docs/api-reference.md) and [troubleshooting](docs/troubleshooting.md).
+The full documentation is at [crenspire.github.io/laravel-whatsapp](https://crenspire.github.io/laravel-whatsapp/). Its source is in the [website](website) folder, and older notes are in [docs](docs).
 
 ## Changelog
 

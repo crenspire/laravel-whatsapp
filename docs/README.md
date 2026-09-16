@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the main [README](../README.md). It covers installation, configuration and every feature with examples.
+The full documentation is at [crenspire.github.io/laravel-whatsapp](https://crenspire.github.io/laravel-whatsapp/). You can also start with the main [README](../README.md). It covers installation, configuration and every feature with examples.
 
 These pages go into more detail:
 
