@@ -13,6 +13,9 @@ hero:
       text: Get started
       link: /guide/installation
     - theme: alt
+      text: What's new in 3.0
+      link: /whats-new
+    - theme: alt
       text: View on GitHub
       link: https://github.com/crenspire/laravel-whatsapp
 

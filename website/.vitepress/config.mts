@@ -12,9 +12,15 @@ export default defineConfig({
 
   markdown: {
     config(md) {
-      // CHANGELOG.md and UPGRADE.md are included from the repo root, where they
-      // link to each other by file name. Point those links at the site pages.
-      const siteLinks: Record<string, string> = { 'UPGRADE.md': '/upgrade', 'CHANGELOG.md': '/changelog' }
+      // CHANGELOG.md, UPGRADE.md and the release notes are included from the repo
+      // root. On GitHub they link to each other by file name and to the site by
+      // full URL; on the site those should be internal links.
+      const siteLinks: Record<string, string> = {
+        'UPGRADE.md': '/upgrade',
+        'CHANGELOG.md': '/changelog',
+        'RELEASE_NOTES_v3.0.0.md': '/whats-new',
+      }
+      const siteUrl = 'https://crenspire.github.io/laravel-whatsapp/'
       const render = md.renderer.rules.link_open!
 
       md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
@@ -22,6 +28,8 @@ export default defineConfig({
 
         if (href && siteLinks[href]) {
           tokens[idx].attrSet('href', siteLinks[href])
+        } else if (href?.startsWith(siteUrl)) {
+          tokens[idx].attrSet('href', '/' + href.slice(siteUrl.length))
         }
 
         return render(tokens, idx, options, env, self)
@@ -42,9 +50,17 @@ export default defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/installation', activeMatch: '/guide/' },
-      { text: 'Upgrade to 3.0', link: '/upgrade' },
-      { text: 'Changelog', link: '/changelog' },
-      { text: 'Packagist', link: 'https://packagist.org/packages/crenspire/laravel-whatsapp' },
+      { text: "What's new", link: '/whats-new' },
+      {
+        text: 'v3.0.0',
+        items: [
+          { text: "What's new in 3.0", link: '/whats-new' },
+          { text: 'Upgrading from 2.x', link: '/upgrade' },
+          { text: 'Changelog', link: '/changelog' },
+          { text: 'All releases', link: `${repo}/releases` },
+          { text: 'Packagist', link: 'https://packagist.org/packages/crenspire/laravel-whatsapp' },
+        ],
+      },
     ],
 
     sidebar: [
@@ -73,6 +89,7 @@ export default defineConfig({
       {
         text: 'Releases',
         items: [
+          { text: "What's new in 3.0", link: '/whats-new' },
           { text: 'Upgrading from 2.x', link: '/upgrade' },
           { text: 'Changelog', link: '/changelog' },
         ],

@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - Unreleased
+## [3.0.0] - 2026-09-16
 
-This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to upgrade from 2.x.
+This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to upgrade from 2.x, and [RELEASE_NOTES_v3.0.0.md](RELEASE_NOTES_v3.0.0.md) for an overview.
 
 ### Added
 - Notification channel: return a `WhatsappMessage` from `toWhatsapp()` and send with `$notifiable->notify()`
@@ -25,10 +25,11 @@ This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to 
 - `getPhoneNumber()` and `getWebhookSubscriptions()`
 - Events carry the phone number ID, and `MessageSent`/`MessageFailed` carry the payload and tenant
 - Messages from users who hide their phone number are handled using their business-scoped user ID
-- Laravel 13 support is now tested in CI
 - Template management: create, edit, delete, list, and status checks
 - `MessageFailed` is dispatched for `failed` webhook statuses, with the message ID
 - `TemplateBuilder::button()` accepts the button index
+- Laravel 13 is tested in CI
+- A documentation website at https://crenspire.github.io/laravel-whatsapp/
 
 ### Removed
 - Support for Laravel 10 and 11, which no longer receive security fixes
@@ -47,17 +48,16 @@ This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to 
 - Webhooks received without a configured `webhook_secret` log a warning
 
 ### Fixed
-- The package couldn't be installed in new Laravel 13 apps, which use Guzzle 8. The package no longer requires Guzzle directly; it uses the version Laravel's HTTP client requires
-- Media, business profile, and template calls reused the first tenant's credentials for every tenant
-- Tenant-specific `business_account_id` was ignored
-- Media uploads were sent with a JSON Content-Type and rejected
-- Custom headers were ignored for media and business profile calls
-- Media header parameters in template messages had the wrong shape
-- Template edit and delete used the wrong endpoints
-- `updateWebsite()` sent `website` instead of `websites`
-- Webhooks only processed the first entry and change of a batched payload
+- Media and business profile calls reused the credentials of the first tenant that made a call, for every tenant
 - Webhook verification logged the expected verify token, and full payloads were logged outside debug mode
 - Webhook verification passed when no verify token was configured
+- The package couldn't be installed in new Laravel 13 apps, which use Guzzle 8. The package no longer requires Guzzle directly; it uses the version Laravel's HTTP client requires
+- Media uploads were sent with a JSON Content-Type and rejected
+- Webhooks only processed the first entry and change of a batched payload
+- Messages without a `from` phone number were dropped
+- Media header parameters in template messages had the wrong shape
+- Custom headers were ignored for media and business profile calls
+- `updateWebsite()` sent `website` instead of `websites`
 - The test suite never booted Laravel, so most tests passed regardless of behavior
 
 ## [2.0.0] - 2026-07-25
@@ -97,6 +97,6 @@ This release contains breaking changes. See [UPGRADE.md](UPGRADE.md) for how to 
 - Comprehensive PHPDoc documentation
 - MIT License
 
-[3.0.0]: https://github.com/crenspire/laravel-whatsapp/compare/v2.0.0...develop
+[3.0.0]: https://github.com/crenspire/laravel-whatsapp/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/crenspire/laravel-whatsapp/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/crenspire/laravel-whatsapp/releases/tag/v1.0.0
