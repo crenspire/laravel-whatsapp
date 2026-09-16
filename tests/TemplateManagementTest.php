@@ -35,8 +35,7 @@ it('creates a template', function () {
     $response = makeService()->createTemplate('order_confirmation', 'en_US', 'UTILITY', $components);
 
     expect($response)->toBe(['id' => 'tpl_1', 'status' => 'PENDING', 'category' => 'UTILITY']);
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === TEMPLATES_URL
+    Http::assertSent(fn (Request $request) => $request->url() === TEMPLATES_URL
         && $request->method() === 'POST'
         && $request->hasHeader('Authorization', 'Bearer test_token')
         && $request->data() === [
@@ -93,7 +92,7 @@ it('accepts every header format', function (string $format) {
 
 it('edits a template by looking up its ID', function () {
     Http::fake([
-        TEMPLATES_URL . '*' => Http::response(templatesPage([
+        TEMPLATES_URL.'*' => Http::response(templatesPage([
             ['id' => 'tpl_es', 'name' => 'order_update', 'language' => 'es_ES'],
             ['id' => 'tpl_en', 'name' => 'order_update', 'language' => 'en_US'],
         ])),
@@ -102,8 +101,7 @@ it('edits a template by looking up its ID', function () {
 
     makeService()->updateTemplate('order_update', 'en_US', 'UTILITY', bodyComponent());
 
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === 'https://graph.facebook.com/v20.0/tpl_en'
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.facebook.com/v20.0/tpl_en'
         && $request->method() === 'POST'
         && $request->data() === ['components' => bodyComponent(), 'category' => 'UTILITY']);
 });
@@ -120,9 +118,8 @@ it('deletes a template using the name query parameter', function () {
 
     expect(makeService()->deleteTemplate('old_template'))->toBeTrue();
 
-    Http::assertSent(fn (Request $request) =>
-        $request->method() === 'DELETE'
-        && $request->url() === TEMPLATES_URL . '?name=old_template');
+    Http::assertSent(fn (Request $request) => $request->method() === 'DELETE'
+        && $request->url() === TEMPLATES_URL.'?name=old_template');
 });
 
 it('surfaces API errors', function () {
@@ -139,7 +136,7 @@ it('gets templates with filters', function (string $method, string $value, strin
 
     makeService()->{$method}($value);
 
-    Http::assertSent(fn (Request $request) => $request->url() === TEMPLATES_URL . '?' . $query);
+    Http::assertSent(fn (Request $request) => $request->url() === TEMPLATES_URL.'?'.$query);
 })->with([
     ['getTemplatesByStatus', 'APPROVED', 'status=APPROVED'],
     ['getTemplatesByStatus', 'PAUSED', 'status=PAUSED'],
@@ -213,7 +210,6 @@ it('uses the tenant business account ID and credentials', function () {
 
     $service->getTemplates([], 'tenant1');
 
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === 'https://graph.facebook.com/v20.0/tenant_waba/message_templates'
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.facebook.com/v20.0/tenant_waba/message_templates'
         && $request->hasHeader('Authorization', 'Bearer tenant_token'));
 });

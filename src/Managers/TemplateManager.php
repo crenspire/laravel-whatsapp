@@ -2,8 +2,8 @@
 
 namespace Crenspire\Whatsapp\Managers;
 
-use Illuminate\Support\Facades\Http;
 use Crenspire\Whatsapp\Exceptions\WhatsappException;
+use Illuminate\Support\Facades\Http;
 
 /**
  * WhatsApp Template Manager
@@ -14,9 +14,10 @@ use Crenspire\Whatsapp\Exceptions\WhatsappException;
  * Templates are submitted for review automatically when they are created
  * or edited; the API has no separate publish or unpublish operation.
  *
- * @package Crenspire\Whatsapp\Managers
  * @author Akshay Joshi <akshay.joshi@crenspire.com>
+ *
  * @version 1.0.0
+ *
  * @since 1.0.0
  */
 class TemplateManager
@@ -33,15 +34,17 @@ class TemplateManager
     public const HEADER_FORMATS = ['TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT', 'LOCATION'];
 
     private string $baseUri;
+
     private string $businessAccountId;
+
     private array $headers;
 
     /**
      * Create a new template manager instance
      *
-     * @param string $baseUri The API base URI
-     * @param string $businessAccountId The WhatsApp Business Account ID
-     * @param array $headers The request headers
+     * @param  string  $baseUri  The API base URI
+     * @param  string  $businessAccountId  The WhatsApp Business Account ID
+     * @param  array  $headers  The request headers
      */
     public function __construct(string $baseUri, string $businessAccountId, array $headers)
     {
@@ -53,11 +56,12 @@ class TemplateManager
     /**
      * Create a new message template and submit it for review
      *
-     * @param string $name The template name
-     * @param string $language The language code (e.g., 'en_US')
-     * @param string $category The template category (MARKETING, UTILITY, AUTHENTICATION)
-     * @param array $components The template components
+     * @param  string  $name  The template name
+     * @param  string  $language  The language code (e.g., 'en_US')
+     * @param  string  $category  The template category (MARKETING, UTILITY, AUTHENTICATION)
+     * @param  array  $components  The template components
      * @return array The API response data (id, status, category)
+     *
      * @throws WhatsappException When template creation fails
      */
     public function create(string $name, string $language, string $category, array $components): array
@@ -78,11 +82,12 @@ class TemplateManager
      *
      * The edited template is re-submitted for review automatically.
      *
-     * @param string $name The template name
-     * @param string $language The language code of the template version to edit
-     * @param string $category The template category
-     * @param array $components The updated template components (replaces all existing components)
+     * @param  string  $name  The template name
+     * @param  string  $language  The language code of the template version to edit
+     * @param  string  $category  The template category
+     * @param  array  $components  The updated template components (replaces all existing components)
      * @return array The API response data
+     *
      * @throws WhatsappException When the template is not found or the edit fails
      */
     public function update(string $name, string $language, string $category, array $components): array
@@ -95,10 +100,11 @@ class TemplateManager
     /**
      * Edit an existing message template by its ID
      *
-     * @param string $templateId The template ID
-     * @param array $components The updated template components (replaces all existing components)
-     * @param string|null $category Optional new template category
+     * @param  string  $templateId  The template ID
+     * @param  array  $components  The updated template components (replaces all existing components)
+     * @param  string|null  $category  Optional new template category
      * @return array The API response data
+     *
      * @throws WhatsappException When the edit fails
      */
     public function updateById(string $templateId, array $components, ?string $category = null): array
@@ -118,13 +124,14 @@ class TemplateManager
     /**
      * Delete a message template (all language versions)
      *
-     * @param string $name The template name
+     * @param  string  $name  The template name
      * @return bool True if deletion was successful
+     *
      * @throws WhatsappException When template deletion fails
      */
     public function delete(string $name): bool
     {
-        $url = $this->templatesUrl() . '?' . http_build_query(['name' => $name]);
+        $url = $this->templatesUrl().'?'.http_build_query(['name' => $name]);
 
         $response = $this->request('delete', $url, [], 'delete template');
 
@@ -134,16 +141,17 @@ class TemplateManager
     /**
      * Get one page of message templates
      *
-     * @param array $filters Optional query parameters (name, status, category, language, limit, after, ...)
+     * @param  array  $filters  Optional query parameters (name, status, category, language, limit, after, ...)
      * @return array The API response data (data, paging)
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function getAll(array $filters = []): array
     {
         $url = $this->templatesUrl();
 
-        if (!empty($filters)) {
-            $url .= '?' . http_build_query($filters);
+        if (! empty($filters)) {
+            $url .= '?'.http_build_query($filters);
         }
 
         return $this->request('get', $url, [], 'retrieve templates');
@@ -152,9 +160,10 @@ class TemplateManager
     /**
      * Get a specific template by name, searching every page of results
      *
-     * @param string $name The template name
-     * @param string|null $language Optional language code to match a specific version
+     * @param  string  $name  The template name
+     * @param  string|null  $language  Optional language code to match a specific version
      * @return array The template data
+     *
      * @throws WhatsappException When the template is not found or retrieval fails
      */
     public function getByName(string $name, ?string $language = null): array
@@ -184,34 +193,39 @@ class TemplateManager
     /**
      * Get templates by status
      *
-     * @param string $status The template status (see STATUSES)
+     * @param  string  $status  The template status (see STATUSES)
      * @return array The filtered templates
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function getByStatus(string $status): array
     {
         $this->validateStatus($status);
+
         return $this->getAll(['status' => $status]);
     }
 
     /**
      * Get templates by category
      *
-     * @param string $category The template category
+     * @param  string  $category  The template category
      * @return array The filtered templates
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function getByCategory(string $category): array
     {
         $this->validateCategory($category);
+
         return $this->getAll(['category' => $category]);
     }
 
     /**
      * Get templates by language
      *
-     * @param string $language The language code
+     * @param  string  $language  The language code
      * @return array The filtered templates
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function getByLanguage(string $language): array
@@ -222,23 +236,26 @@ class TemplateManager
     /**
      * Get template status
      *
-     * @param string $name The template name
-     * @param string|null $language Optional language code to match a specific version
+     * @param  string  $name  The template name
+     * @param  string|null  $language  Optional language code to match a specific version
      * @return string The template status
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function getStatus(string $name, ?string $language = null): string
     {
         $template = $this->getByName($name, $language);
+
         return $template['status'] ?? 'UNKNOWN';
     }
 
     /**
      * Check if template is approved
      *
-     * @param string $name The template name
-     * @param string|null $language Optional language code to match a specific version
+     * @param  string  $name  The template name
+     * @param  string|null  $language  Optional language code to match a specific version
      * @return bool True if template is approved
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function isApproved(string $name, ?string $language = null): bool
@@ -249,9 +266,10 @@ class TemplateManager
     /**
      * Check if template is pending review
      *
-     * @param string $name The template name
-     * @param string|null $language Optional language code to match a specific version
+     * @param  string  $name  The template name
+     * @param  string|null  $language  Optional language code to match a specific version
      * @return bool True if template is pending
+     *
      * @throws WhatsappException When template retrieval fails
      */
     public function isPending(string $name, ?string $language = null): bool
@@ -272,12 +290,13 @@ class TemplateManager
     /**
      * Send a request to the Graph API and decode the response
      *
-     * @param string $method The HTTP method (get, post, delete)
-     * @param string $url The request URL
-     * @param array $payload The JSON payload for POST requests
-     * @param string $action Description of the action for error messages
-     * @param int $timeout The request timeout in seconds
+     * @param  string  $method  The HTTP method (get, post, delete)
+     * @param  string  $url  The request URL
+     * @param  array  $payload  The JSON payload for POST requests
+     * @param  string  $action  Description of the action for error messages
+     * @param  int  $timeout  The request timeout in seconds
      * @return array The API response data
+     *
      * @throws WhatsappException When the request fails
      */
     private function request(string $method, string $url, array $payload, string $action, int $timeout = 30): array
@@ -291,7 +310,7 @@ class TemplateManager
         if ($response->failed()) {
             $errorData = $response->json();
             throw new WhatsappException(
-                "Failed to {$action}: " . ($errorData['error']['message'] ?? 'Unknown error'),
+                "Failed to {$action}: ".($errorData['error']['message'] ?? 'Unknown error'),
                 $response->status(),
                 $response->body()
             );
@@ -303,15 +322,15 @@ class TemplateManager
     /**
      * Validate template category
      *
-     * @param string $category The category to validate
-     * @return void
+     * @param  string  $category  The category to validate
+     *
      * @throws WhatsappException When category is invalid
      */
     private function validateCategory(string $category): void
     {
-        if (!in_array($category, self::CATEGORIES, true)) {
+        if (! in_array($category, self::CATEGORIES, true)) {
             throw new WhatsappException(
-                "Invalid template category: {$category}. Valid categories are: " . implode(', ', self::CATEGORIES)
+                "Invalid template category: {$category}. Valid categories are: ".implode(', ', self::CATEGORIES)
             );
         }
     }
@@ -319,15 +338,15 @@ class TemplateManager
     /**
      * Validate template status
      *
-     * @param string $status The status to validate
-     * @return void
+     * @param  string  $status  The status to validate
+     *
      * @throws WhatsappException When status is invalid
      */
     private function validateStatus(string $status): void
     {
-        if (!in_array($status, self::STATUSES, true)) {
+        if (! in_array($status, self::STATUSES, true)) {
             throw new WhatsappException(
-                "Invalid template status: {$status}. Valid statuses are: " . implode(', ', self::STATUSES)
+                "Invalid template status: {$status}. Valid statuses are: ".implode(', ', self::STATUSES)
             );
         }
     }
@@ -335,32 +354,32 @@ class TemplateManager
     /**
      * Validate template components
      *
-     * @param array $components The components to validate
-     * @return void
+     * @param  array  $components  The components to validate
+     *
      * @throws WhatsappException When components are invalid
      */
     private function validateComponents(array $components): void
     {
         if (empty($components)) {
-            throw new WhatsappException("Template components cannot be empty");
+            throw new WhatsappException('Template components cannot be empty');
         }
 
         foreach ($components as $component) {
-            if (!isset($component['type']) || !in_array($component['type'], self::COMPONENT_TYPES, true)) {
+            if (! isset($component['type']) || ! in_array($component['type'], self::COMPONENT_TYPES, true)) {
                 throw new WhatsappException(
-                    "Invalid component type. Valid types are: " . implode(', ', self::COMPONENT_TYPES)
+                    'Invalid component type. Valid types are: '.implode(', ', self::COMPONENT_TYPES)
                 );
             }
 
-            if (isset($component['format']) && !in_array($component['format'], self::HEADER_FORMATS, true)) {
+            if (isset($component['format']) && ! in_array($component['format'], self::HEADER_FORMATS, true)) {
                 throw new WhatsappException(
-                    "Invalid component format. Valid formats are: " . implode(', ', self::HEADER_FORMATS)
+                    'Invalid component format. Valid formats are: '.implode(', ', self::HEADER_FORMATS)
                 );
             }
         }
 
-        if (!in_array('BODY', array_column($components, 'type'), true)) {
-            throw new WhatsappException("Template components must include a BODY component");
+        if (! in_array('BODY', array_column($components, 'type'), true)) {
+            throw new WhatsappException('Template components must include a BODY component');
         }
     }
 }

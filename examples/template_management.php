@@ -13,8 +13,8 @@ use Crenspire\Whatsapp\Facades\Whatsapp;
 $components = [
     [
         'type' => 'BODY',
-        'text' => 'Hello {{1}}, your order {{2}} has been confirmed.'
-    ]
+        'text' => 'Hello {{1}}, your order {{2}} has been confirmed.',
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -29,16 +29,16 @@ $components = [
     [
         'type' => 'HEADER',
         'format' => 'TEXT',
-        'text' => 'Order Confirmation'
+        'text' => 'Order Confirmation',
     ],
     [
         'type' => 'BODY',
-        'text' => 'Hi {{1}}, your order {{2}} has been confirmed and will be delivered on {{3}}.'
+        'text' => 'Hi {{1}}, your order {{2}} has been confirmed and will be delivered on {{3}}.',
     ],
     [
         'type' => 'FOOTER',
-        'text' => 'Thank you for shopping with us!'
-    ]
+        'text' => 'Thank you for shopping with us!',
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -54,16 +54,16 @@ $components = [
         'type' => 'HEADER',
         'format' => 'IMAGE',
         'example' => [
-            'header_handle' => ['image_handle']
-        ]
+            'header_handle' => ['image_handle'],
+        ],
     ],
     [
         'type' => 'BODY',
-        'text' => 'Check out our latest collection! Get {{1}}% off on all items.'
+        'text' => 'Check out our latest collection! Get {{1}}% off on all items.',
     ],
     [
         'type' => 'FOOTER',
-        'text' => 'Limited time offer'
+        'text' => 'Limited time offer',
     ],
     [
         'type' => 'BUTTONS',
@@ -71,15 +71,15 @@ $components = [
             [
                 'type' => 'URL',
                 'text' => 'Shop Now',
-                'url' => 'https://example.com/shop'
+                'url' => 'https://example.com/shop',
             ],
             [
                 'type' => 'PHONE_NUMBER',
                 'text' => 'Call Us',
-                'phone_number' => '+1234567890'
-            ]
-        ]
-    ]
+                'phone_number' => '+1234567890',
+            ],
+        ],
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -93,8 +93,8 @@ $result = Whatsapp::createTemplate(
 $components = [
     [
         'type' => 'BODY',
-        'text' => 'Your verification code is {{1}}. This code will expire in {{2}} minutes.'
-    ]
+        'text' => 'Your verification code is {{1}}. This code will expire in {{2}} minutes.',
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -109,16 +109,16 @@ $updatedComponents = [
     [
         'type' => 'HEADER',
         'format' => 'TEXT',
-        'text' => 'Order Update'
+        'text' => 'Order Update',
     ],
     [
         'type' => 'BODY',
-        'text' => 'Hi {{1}}, your order {{2}} has been shipped and is on its way!'
+        'text' => 'Hi {{1}}, your order {{2}} has been shipped and is on its way!',
     ],
     [
         'type' => 'FOOTER',
-        'text' => 'Track your order for more details'
-    ]
+        'text' => 'Track your order for more details',
+    ],
 ];
 
 $result = Whatsapp::updateTemplate(
@@ -183,8 +183,8 @@ foreach ($languages as $language) {
         [
             [
                 'type' => 'BODY',
-                'text' => 'Welcome to our service!'
-            ]
+                'text' => 'Welcome to our service!',
+            ],
         ]
     );
 }
@@ -195,13 +195,13 @@ $components = [
         'type' => 'HEADER',
         'format' => 'VIDEO',
         'example' => [
-            'header_handle' => ['video_handle']
-        ]
+            'header_handle' => ['video_handle'],
+        ],
     ],
     [
         'type' => 'BODY',
-        'text' => 'Watch our latest product demo!'
-    ]
+        'text' => 'Watch our latest product demo!',
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -217,13 +217,13 @@ $components = [
         'type' => 'HEADER',
         'format' => 'DOCUMENT',
         'example' => [
-            'header_handle' => ['document_handle']
-        ]
+            'header_handle' => ['document_handle'],
+        ],
     ],
     [
         'type' => 'BODY',
-        'text' => 'Please find attached your invoice for order {{1}}.'
-    ]
+        'text' => 'Please find attached your invoice for order {{1}}.',
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -237,25 +237,25 @@ $result = Whatsapp::createTemplate(
 $components = [
     [
         'type' => 'BODY',
-        'text' => 'How would you like to proceed?'
+        'text' => 'How would you like to proceed?',
     ],
     [
         'type' => 'BUTTONS',
         'buttons' => [
             [
                 'type' => 'QUICK_REPLY',
-                'text' => 'Yes'
+                'text' => 'Yes',
             ],
             [
                 'type' => 'QUICK_REPLY',
-                'text' => 'No'
+                'text' => 'No',
             ],
             [
                 'type' => 'QUICK_REPLY',
-                'text' => 'Maybe Later'
-            ]
-        ]
-    ]
+                'text' => 'Maybe Later',
+            ],
+        ],
+    ],
 ];
 
 $result = Whatsapp::createTemplate(
@@ -269,7 +269,7 @@ $result = Whatsapp::createTemplate(
 $filters = [
     'status' => 'APPROVED',
     'category' => 'UTILITY',
-    'language' => 'en_US'
+    'language' => 'en_US',
 ];
 
 $filteredTemplates = Whatsapp::getTemplates($filters);
@@ -283,7 +283,7 @@ try {
         $components
     );
 } catch (Exception $e) {
-    echo "Error creating template: " . $e->getMessage();
+    echo 'Error creating template: '.$e->getMessage();
 }
 
 // Example 22: Check template before using
@@ -295,7 +295,7 @@ if (Whatsapp::isTemplateApproved('order_confirmation')) {
         ['John', 'ORD-12345']
     );
 } else {
-    echo "Template is not approved yet";
+    echo 'Template is not approved yet';
 }
 
 // Example 23: Bulk template operations
@@ -305,25 +305,25 @@ $templatesToCreate = [
         'language' => 'en_US',
         'category' => 'UTILITY',
         'components' => [
-            ['type' => 'BODY', 'text' => 'Welcome {{1}}! Thanks for joining us.']
-        ]
+            ['type' => 'BODY', 'text' => 'Welcome {{1}}! Thanks for joining us.'],
+        ],
     ],
     [
         'name' => 'password_reset',
         'language' => 'en_US',
         'category' => 'AUTHENTICATION',
         'components' => [
-            ['type' => 'BODY', 'text' => 'Your password reset code is {{1}}.']
-        ]
+            ['type' => 'BODY', 'text' => 'Your password reset code is {{1}}.'],
+        ],
     ],
     [
         'name' => 'order_shipped',
         'language' => 'en_US',
         'category' => 'UTILITY',
         'components' => [
-            ['type' => 'BODY', 'text' => 'Your order {{1}} has been shipped!']
-        ]
-    ]
+            ['type' => 'BODY', 'text' => 'Your order {{1}} has been shipped!'],
+        ],
+    ],
 ];
 
 foreach ($templatesToCreate as $template) {
@@ -336,6 +336,6 @@ foreach ($templatesToCreate as $template) {
         );
         echo "Created template: {$template['name']}\n";
     } catch (Exception $e) {
-        echo "Failed to create template {$template['name']}: " . $e->getMessage() . "\n";
+        echo "Failed to create template {$template['name']}: ".$e->getMessage()."\n";
     }
 }

@@ -39,7 +39,7 @@ it('resolves the service from the container', function () {
 });
 
 it('creates media storage directory', function () {
-    $tempDir = sys_get_temp_dir() . '/whatsapp-test-' . uniqid();
+    $tempDir = sys_get_temp_dir().'/whatsapp-test-'.uniqid();
 
     makeService(['media_storage' => $tempDir]);
 
@@ -145,8 +145,7 @@ it('sends a text message', function () {
 
     expect($response['messages'][0]['id'])->toBe('wamid.123');
 
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === MESSAGES_URL
+    Http::assertSent(fn (Request $request) => $request->url() === MESSAGES_URL
         && $request->method() === 'POST'
         && $request->hasHeader('Authorization', 'Bearer test_token')
         && $request->data() === [
@@ -156,8 +155,7 @@ it('sends a text message', function () {
             'text' => ['body' => 'Hello', 'preview_url' => true],
         ]);
 
-    Event::assertDispatched(MessageSent::class, fn ($event) =>
-        $event->messageId === 'wamid.123' && $event->recipient === '1234567890');
+    Event::assertDispatched(MessageSent::class, fn ($event) => $event->messageId === 'wamid.123' && $event->recipient === '1234567890');
 });
 
 it('throws and dispatches MessageFailed when the API rejects a message', function () {
@@ -196,8 +194,7 @@ it('sends messages with tenant credentials', function () {
 
     tenantService()->sendTextMessage('1234567890', 'Hello', false, 'tenant1');
 
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === 'https://graph.facebook.com/v20.0/tenant_phone/messages'
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.facebook.com/v20.0/tenant_phone/messages'
         && $request->hasHeader('Authorization', 'Bearer tenant_token')
         && $request->hasHeader('X-Tenant-Header', 'tenant1-value'));
 });
@@ -207,8 +204,7 @@ it('sends a media message with caption', function () {
 
     makeService()->sendMediaMessage('1234567890', 'media_1', 'image', 'A caption');
 
-    Http::assertSent(fn (Request $request) =>
-        $request['type'] === 'image'
+    Http::assertSent(fn (Request $request) => $request['type'] === 'image'
         && $request['image'] === ['id' => 'media_1', 'caption' => 'A caption']);
 });
 
@@ -306,8 +302,7 @@ it('sends a flow message', function () {
 
     makeService()->sendFlowMessage('1234567890', 'token', 'flow_1', 'Start', 'navigate', ['screen' => 'WELCOME']);
 
-    Http::assertSent(fn (Request $request) =>
-        $request['interactive']['type'] === 'flow'
+    Http::assertSent(fn (Request $request) => $request['interactive']['type'] === 'flow'
         && $request['interactive']['action']['parameters'] === [
             'flow_token' => 'token',
             'flow_id' => 'flow_1',
@@ -334,8 +329,7 @@ it('marks a message as read', function () {
 
     makeService()->markMessageAsRead('wamid.1');
 
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === MESSAGES_URL
+    Http::assertSent(fn (Request $request) => $request->url() === MESSAGES_URL
         && $request->data() === ['messaging_product' => 'whatsapp', 'status' => 'read', 'message_id' => 'wamid.1']);
 });
 
@@ -344,7 +338,7 @@ it('marks a message as read', function () {
 it('throws when uploading a missing file', function () {
     Http::fake();
 
-    expect(fn () => makeService()->uploadMedia(sys_get_temp_dir() . '/non-existent-file.jpg', 'image/jpeg'))
+    expect(fn () => makeService()->uploadMedia(sys_get_temp_dir().'/non-existent-file.jpg', 'image/jpeg'))
         ->toThrow(WhatsappException::class, 'File not found');
 
     Http::assertNothingSent();
@@ -352,14 +346,13 @@ it('throws when uploading a missing file', function () {
 
 it('uploads media', function () {
     Http::fake(['*/media' => Http::response(['id' => 'media_1'])]);
-    $file = tempnam(sys_get_temp_dir(), 'wa') . '.jpg';
+    $file = tempnam(sys_get_temp_dir(), 'wa').'.jpg';
     file_put_contents($file, 'binary');
 
     $response = makeService()->uploadMedia($file, 'image/jpeg');
 
     expect($response['id'])->toBe('media_1');
-    Http::assertSent(fn (Request $request) =>
-        $request->url() === 'https://graph.facebook.com/v20.0/123456789/media' && $request->isMultipart());
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.facebook.com/v20.0/123456789/media' && $request->isMultipart());
     unlink($file);
 });
 
@@ -370,7 +363,7 @@ it('gets media info', function () {
 });
 
 it('downloads media using the extension for its mime type', function () {
-    $storage = sys_get_temp_dir() . '/whatsapp-test-' . uniqid();
+    $storage = sys_get_temp_dir().'/whatsapp-test-'.uniqid();
     Http::fake([
         'https://graph.facebook.com/v20.0/media_1' => Http::response(['url' => 'https://lookaside.fbsbx.com/file', 'mime_type' => 'application/pdf']),
         'https://lookaside.fbsbx.com/file' => Http::response('pdf-bytes'),
@@ -424,8 +417,7 @@ it('updates the business profile', function () {
 
     makeService()->updateBusinessProfile(['messaging_product' => 'whatsapp', 'about' => 'Test business']);
 
-    Http::assertSent(fn (Request $request) =>
-        $request->method() === 'POST' && $request['about'] === 'Test business');
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST' && $request['about'] === 'Test business');
 });
 
 it('uses the correct tenant credentials for each business profile call', function () {
@@ -523,7 +515,7 @@ it('builds template payloads with the template builder', function () {
 
 it('detects the MIME type when uploading with a media category', function () {
     Http::fake(['*/media' => Http::response(['id' => 'media_1'])]);
-    $file = sys_get_temp_dir() . '/wa-' . uniqid() . '.png';
+    $file = sys_get_temp_dir().'/wa-'.uniqid().'.png';
     file_put_contents($file, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAMAASsJTYQAAAAASUVORK5CYII='));
 
     makeService()->uploadMedia($file, 'image');

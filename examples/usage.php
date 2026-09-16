@@ -28,7 +28,7 @@ Whatsapp::sendMediaMessage('+1234567890', 'media_id_123', 'image', 'Check this o
 // Example 5: Interactive button message
 $buttons = [
     ['id' => 'btn1', 'title' => 'Option 1'],
-    ['id' => 'btn2', 'title' => 'Option 2']
+    ['id' => 'btn2', 'title' => 'Option 2'],
 ];
 Whatsapp::sendButtonMessage('+1234567890', 'Choose an option:', $buttons, 'Header', 'Footer');
 
@@ -37,9 +37,9 @@ $sections = [
     [
         'title' => 'Section 1',
         'rows' => [
-            ['id' => 'row1', 'title' => 'Row 1', 'description' => 'Description 1']
-        ]
-    ]
+            ['id' => 'row1', 'title' => 'Row 1', 'description' => 'Description 1'],
+        ],
+    ],
 ];
 Whatsapp::sendListMessage('+1234567890', 'Choose from the list:', 'View Options', $sections);
 
@@ -49,15 +49,15 @@ $contacts = [
         'name' => [
             'formatted_name' => 'John Doe',
             'first_name' => 'John',
-            'last_name' => 'Doe'
+            'last_name' => 'Doe',
         ],
         'phones' => [
             [
                 'phone' => '+1234567890',
-                'type' => 'WORK'
-            ]
-        ]
-    ]
+                'type' => 'WORK',
+            ],
+        ],
+    ],
 ];
 Whatsapp::sendContactMessage('+1234567890', $contacts);
 
@@ -82,9 +82,9 @@ $productSections = [
     [
         'title' => 'Products',
         'product_items' => [
-            ['product_retailer_id' => 'product_1']
-        ]
-    ]
+            ['product_retailer_id' => 'product_1'],
+        ],
+    ],
 ];
 Whatsapp::sendMultiProductMessage('+1234567890', 'catalog_id', 'Browse Products', $productSections, 'Our Products');
 
@@ -100,7 +100,7 @@ Whatsapp::deleteMedia($mediaId);
 $profile = Whatsapp::getBusinessProfile();
 Whatsapp::updateBusinessProfile([
     'messaging_product' => 'whatsapp',
-    'about' => 'Updated business description'
+    'about' => 'Updated business description',
 ]);
 
 // Example 16: Mark message as read

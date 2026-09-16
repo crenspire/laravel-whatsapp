@@ -2,19 +2,21 @@
 
 namespace Crenspire\Whatsapp\Facades;
 
+use Crenspire\Whatsapp\WhatsappService;
 use Illuminate\Support\Facades\Facade;
 
 /**
  * WhatsApp Facade
- * 
+ *
  * This facade provides a convenient static interface to the WhatsApp service,
  * allowing easy access to all WhatsApp functionality throughout the application.
- * 
- * @package Crenspire\Whatsapp\Facades
+ *
  * @author Akshay Joshi <akshay.joshi@crenspire.com>
+ *
  * @version 1.0.0
+ *
  * @since 1.0.0
- * 
+ *
  * @method static array sendMessage(string $to, array $message, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
  * @method static array sendTextMessage(string $to, string $text, bool $previewUrl = false, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
  * @method static array sendMediaMessage(string $to, string $mediaId, string $type, ?string $caption = null, ?string $tenantId = null, array $customHeaders = [], ?string $language = null)
@@ -55,11 +57,11 @@ class Whatsapp extends Facade
 {
     /**
      * Get the registered name of the component
-     * 
+     *
      * @return string The service class name
      */
     protected static function getFacadeAccessor(): string
     {
-        return \Crenspire\Whatsapp\WhatsappService::class;
+        return WhatsappService::class;
     }
 }

@@ -27,7 +27,7 @@ return [
     // Per-tenant routing
     'tenants' => [
         // 'tenant_id' => [
-        //     'phone_number_id' => '...', 
+        //     'phone_number_id' => '...',
         //     'access_token' => '...',
         //     'business_account_id' => '...', // Optional business account ID per tenant
         //     'headers' => ['Custom-Header' => 'value'], // Optional custom headers per tenant

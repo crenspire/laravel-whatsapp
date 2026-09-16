@@ -2,35 +2,39 @@
 
 namespace Crenspire\Whatsapp\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use Crenspire\Whatsapp\Events\MessageDelivered;
 use Crenspire\Whatsapp\Events\MessageFailed;
 use Crenspire\Whatsapp\Events\MessageRead;
 use Crenspire\Whatsapp\Events\MessageReceived;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Log;
 
 /**
  * WhatsApp Webhook Controller
- * 
+ *
  * This controller handles incoming webhooks from WhatsApp Business API,
  * including webhook verification, message status updates, and incoming messages.
- * 
- * @package Crenspire\Whatsapp\Http\Controllers
+ *
  * @author Akshay Joshi <akshay.joshi@crenspire.com>
+ *
  * @version 1.0.0
+ *
  * @since 1.0.0
  */
 class WhatsappWebhookController extends Controller
 {
     /**
      * Verify webhook subscription
-     * 
+     *
      * This method handles the initial webhook verification process required by WhatsApp
      * to confirm the webhook endpoint is valid and accessible.
-     * 
-     * @param Request $request The incoming HTTP request
-     * @return \Illuminate\Http\Response The verification response
+     *
+     * @param  Request  $request  The incoming HTTP request
+     * @return Response The verification response
      */
     public function verify(Request $request)
     {
@@ -43,13 +47,14 @@ class WhatsappWebhookController extends Controller
             && is_string($expectedToken) && $expectedToken !== ''
             && is_string($token) && hash_equals($expectedToken, $token)) {
             Log::info('WhatsApp webhook verified successfully');
+
             return response($challenge, 200);
         }
 
         Log::warning('WhatsApp webhook verification failed', [
             'mode' => $mode,
             'token_provided' => $token !== null,
-            'token_configured' => !empty($expectedToken),
+            'token_configured' => ! empty($expectedToken),
         ]);
 
         return response('Forbidden', 403);
@@ -57,19 +62,20 @@ class WhatsappWebhookController extends Controller
 
     /**
      * Handle incoming webhook data
-     * 
+     *
      * This method processes incoming webhook data from WhatsApp, including
      * message status updates and incoming messages.
-     * 
-     * @param Request $request The incoming HTTP request
-     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse The receipt confirmation, or 401 for an invalid signature
+     *
+     * @param  Request  $request  The incoming HTTP request
+     * @return Response|JsonResponse The receipt confirmation, or 401 for an invalid signature
      */
     public function handle(Request $request)
     {
         // Verify webhook signature if configured
         if (config('whatsapp.webhook_secret')) {
-            if (!$this->verifySignature($request)) {
+            if (! $this->verifySignature($request)) {
                 Log::warning('WhatsApp webhook signature verification failed');
+
                 return response('Unauthorized', 401);
             }
         } else {
@@ -108,11 +114,11 @@ class WhatsappWebhookController extends Controller
 
     /**
      * Verify webhook signature
-     * 
+     *
      * This method verifies the webhook signature to ensure the request
      * is authentic and comes from WhatsApp.
-     * 
-     * @param Request $request The incoming HTTP request
+     *
+     * @param  Request  $request  The incoming HTTP request
      * @return bool True if signature is valid, false otherwise
      */
     protected function verifySignature(Request $request): bool
@@ -121,23 +127,22 @@ class WhatsappWebhookController extends Controller
         $payload = $request->getContent();
         $secret = config('whatsapp.webhook_secret');
 
-        if (!$signature || !$secret) {
+        if (! $signature || ! $secret) {
             return false;
         }
 
-        $expectedSignature = 'sha256=' . hash_hmac('sha256', $payload, $secret);
-        
+        $expectedSignature = 'sha256='.hash_hmac('sha256', $payload, $secret);
+
         return hash_equals($expectedSignature, $signature);
     }
 
     /**
      * Handle message status updates
-     * 
+     *
      * This method processes message status updates (delivered, read, etc.)
      * and dispatches appropriate events.
-     * 
-     * @param array $statuses Array of status update data
-     * @return void
+     *
+     * @param  array  $statuses  Array of status update data
      */
     protected function handleStatusUpdates(array $statuses): void
     {
@@ -146,14 +151,14 @@ class WhatsappWebhookController extends Controller
             $recipient = $status['recipient_id'] ?? null;
             $statusType = $status['status'] ?? null;
 
-            if (!$messageId || !$recipient || !$statusType) {
+            if (! $messageId || ! $recipient || ! $statusType) {
                 continue;
             }
 
             Log::info('WhatsApp message status update', [
                 'message_id' => $messageId,
                 'recipient' => $recipient,
-                'status' => $statusType
+                'status' => $statusType,
             ]);
 
             switch ($statusType) {
@@ -165,7 +170,7 @@ class WhatsappWebhookController extends Controller
                     event(new MessageRead(
                         $messageId,
                         $recipient,
-                        \Carbon\Carbon::createFromTimestamp($timestamp)
+                        Carbon::createFromTimestamp($timestamp)
                     ));
                     break;
                 case 'failed':
@@ -177,12 +182,11 @@ class WhatsappWebhookController extends Controller
 
     /**
      * Handle incoming messages
-     * 
+     *
      * This method processes incoming messages from WhatsApp users
      * and dispatches the MessageReceived event.
-     * 
-     * @param array $messages Array of incoming message data
-     * @return void
+     *
+     * @param  array  $messages  Array of incoming message data
      */
     protected function handleIncomingMessages(array $messages): void
     {
@@ -192,12 +196,13 @@ class WhatsappWebhookController extends Controller
             $timestamp = $message['timestamp'] ?? time();
             $type = $message['type'] ?? 'unknown';
 
-            if (!$messageId || !$from) {
+            if (! $messageId || ! $from) {
                 Log::warning('WhatsApp message missing required fields', [
                     'message_id' => $messageId,
                     'from' => $from,
-                    'message' => $message
+                    'message' => $message,
                 ]);
+
                 continue;
             }
 
@@ -206,22 +211,21 @@ class WhatsappWebhookController extends Controller
                 'from' => $from,
                 'type' => $type,
                 'timestamp' => $timestamp,
-                'context' => $message['context'] ?? null
+                'context' => $message['context'] ?? null,
             ]);
 
             // Handle different message types
             $this->processMessageByType($message, $type);
 
-            event(new MessageReceived($messageId, $from, $message, \Carbon\Carbon::createFromTimestamp($timestamp)));
+            event(new MessageReceived($messageId, $from, $message, Carbon::createFromTimestamp($timestamp)));
         }
     }
 
     /**
      * Process message based on its type
-     * 
-     * @param array $message The message data
-     * @param string $type The message type
-     * @return void
+     *
+     * @param  array  $message  The message data
+     * @param  string  $type  The message type
      */
     protected function processMessageByType(array $message, string $type): void
     {
@@ -254,16 +258,15 @@ class WhatsappWebhookController extends Controller
             default:
                 Log::info('Unknown message type received', [
                     'type' => $type,
-                    'message_id' => $message['id'] ?? null
+                    'message_id' => $message['id'] ?? null,
                 ]);
         }
     }
 
     /**
      * Handle text messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleTextMessage(array $message): void
     {
@@ -271,15 +274,14 @@ class WhatsappWebhookController extends Controller
         Log::info('Text message received', [
             'message_id' => $message['id'] ?? null,
             'text_length' => strlen($text),
-            'preview_url' => $message['text']['preview_url'] ?? false
+            'preview_url' => $message['text']['preview_url'] ?? false,
         ]);
     }
 
     /**
      * Handle media messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleMediaMessage(array $message): void
     {
@@ -293,15 +295,14 @@ class WhatsappWebhookController extends Controller
             'media_type' => $mediaType,
             'media_id' => $mediaId,
             'mime_type' => $mimeType,
-            'sha256' => $sha256
+            'sha256' => $sha256,
         ]);
     }
 
     /**
      * Handle location messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleLocationMessage(array $message): void
     {
@@ -316,31 +317,29 @@ class WhatsappWebhookController extends Controller
             'latitude' => $latitude,
             'longitude' => $longitude,
             'name' => $name,
-            'address' => $address
+            'address' => $address,
         ]);
     }
 
     /**
      * Handle contact messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleContactMessage(array $message): void
     {
         $contacts = $message['contacts'] ?? [];
-        
+
         Log::info('Contact message received', [
             'message_id' => $message['id'] ?? null,
-            'contact_count' => count($contacts)
+            'contact_count' => count($contacts),
         ]);
     }
 
     /**
      * Handle interactive messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleInteractiveMessage(array $message): void
     {
@@ -353,15 +352,14 @@ class WhatsappWebhookController extends Controller
             'message_id' => $message['id'] ?? null,
             'interactive_type' => $type,
             'button_reply' => $buttonReply,
-            'list_reply' => $listReply
+            'list_reply' => $listReply,
         ]);
     }
 
     /**
      * Handle reaction messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleReactionMessage(array $message): void
     {
@@ -372,15 +370,14 @@ class WhatsappWebhookController extends Controller
         Log::info('Reaction message received', [
             'message_id' => $message['id'] ?? null,
             'reacted_to_message_id' => $messageId,
-            'emoji' => $emoji
+            'emoji' => $emoji,
         ]);
     }
 
     /**
      * Handle system messages
-     * 
-     * @param array $message The message data
-     * @return void
+     *
+     * @param  array  $message  The message data
      */
     protected function handleSystemMessage(array $message): void
     {
@@ -391,7 +388,7 @@ class WhatsappWebhookController extends Controller
         Log::info('System message received', [
             'message_id' => $message['id'] ?? null,
             'system_type' => $type,
-            'body' => $body
+            'body' => $body,
         ]);
     }
 }

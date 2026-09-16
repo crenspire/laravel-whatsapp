@@ -1,6 +1,7 @@
 <?php
 
 use Crenspire\Whatsapp\Tests\TestCase;
+use Crenspire\Whatsapp\WhatsappService;
 
 uses(TestCase::class)->in(__DIR__);
 
@@ -23,7 +24,7 @@ function whatsappConfig(array $overrides = []): array
         'default_language' => 'en_US',
         'tenants' => [],
         'rate_limit' => 30,
-        'media_storage' => sys_get_temp_dir() . '/whatsapp-media',
+        'media_storage' => sys_get_temp_dir().'/whatsapp-media',
         'debug' => false,
     ], $overrides);
 }
@@ -31,7 +32,7 @@ function whatsappConfig(array $overrides = []): array
 /**
  * Create a service instance using the test configuration.
  */
-function makeService(array $overrides = []): \Crenspire\Whatsapp\WhatsappService
+function makeService(array $overrides = []): WhatsappService
 {
-    return new \Crenspire\Whatsapp\WhatsappService(whatsappConfig($overrides));
+    return new WhatsappService(whatsappConfig($overrides));
 }

@@ -42,8 +42,7 @@ it('does not log the expected verify token', function () {
 
     $this->get('/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=wrong');
 
-    Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context) =>
-        !str_contains(json_encode($context), 'test_verify_token'));
+    Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context) => ! str_contains(json_encode($context), 'test_verify_token'));
 });
 
 // Signature
@@ -63,7 +62,7 @@ it('accepts payloads with a valid signature', function () {
 
     $this->call('POST', '/whatsapp/webhook', [], [], [], [
         'CONTENT_TYPE' => 'application/json',
-        'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $body, 'app_secret'),
+        'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'app_secret'),
     ], $body)->assertOk();
 });
 
@@ -88,15 +87,12 @@ it('dispatches events for incoming messages and status updates', function () {
         ],
     ])]))->assertOk()->assertJson(['status' => 'ok']);
 
-    Event::assertDispatched(MessageReceived::class, fn ($event) =>
-        $event->messageId === 'wamid.in'
+    Event::assertDispatched(MessageReceived::class, fn ($event) => $event->messageId === 'wamid.in'
         && $event->from === '15551234567'
         && $event->timestamp->timestamp === 1700000000);
     Event::assertDispatched(MessageDelivered::class, fn ($event) => $event->messageId === 'wamid.1');
-    Event::assertDispatched(MessageRead::class, fn ($event) =>
-        $event->messageId === 'wamid.2' && $event->timestamp->timestamp === 1700000100);
-    Event::assertDispatched(MessageFailed::class, fn ($event) =>
-        $event->messageId === 'wamid.3'
+    Event::assertDispatched(MessageRead::class, fn ($event) => $event->messageId === 'wamid.2' && $event->timestamp->timestamp === 1700000100);
+    Event::assertDispatched(MessageFailed::class, fn ($event) => $event->messageId === 'wamid.3'
         && $event->recipient === '15550000003'
         && $event->error[0]['code'] === 131026);
 });
@@ -140,8 +136,7 @@ it('only logs the full payload in debug mode', function () {
     ])]));
 
     Log::shouldNotHaveReceived('debug');
-    Log::shouldNotHaveReceived('info', [Mockery::any(), Mockery::on(fn ($context) =>
-        str_contains(json_encode($context), 'secret text'))]);
+    Log::shouldNotHaveReceived('info', [Mockery::any(), Mockery::on(fn ($context) => str_contains(json_encode($context), 'secret text'))]);
 });
 
 it('warns when accepting payloads without a configured secret', function () {
@@ -150,8 +145,7 @@ it('warns when accepting payloads without a configured secret', function () {
 
     $this->postJson('/whatsapp/webhook', webhookPayload([]))->assertOk();
 
-    Log::shouldHaveReceived('warning')->withArgs(fn ($message) =>
-        str_contains($message, 'without signature verification'));
+    Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_contains($message, 'without signature verification'));
 });
 
 it('does not warn about signatures when a secret is configured', function () {
@@ -162,7 +156,7 @@ it('does not warn about signatures when a secret is configured', function () {
 
     $this->call('POST', '/whatsapp/webhook', [], [], [], [
         'CONTENT_TYPE' => 'application/json',
-        'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $body, 'app_secret'),
+        'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'app_secret'),
     ], $body)->assertOk();
 
     Log::shouldNotHaveReceived('warning');
