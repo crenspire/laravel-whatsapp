@@ -3,9 +3,6 @@ parameters:
     paths:
         - src
     ignoreErrors:
-        - '#Call to an undefined method Illuminate\\Support\\Facades\\Facade::.*#'
-    bootstrapFiles:
-        - vendor/autoload.php
-    checkMissingIterableValueType: false
-    checkGenericClassInNonGenericObjectType: false
+        - identifier: missingType.iterableValue
+        - identifier: missingType.generics
     reportUnmatchedIgnoredErrors: false

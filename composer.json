@@ -26,9 +26,11 @@
     "guzzlehttp/guzzle": "^7.0"
   },
     "require-dev": {
-        "phpunit/phpunit": "^10.0",
-        "pestphp/pest": "^2.0",
-        "orchestra/testbench": "^8.0|^9.0"
+        "phpunit/phpunit": "^10.0|^11.0",
+        "pestphp/pest": "^2.0|^3.0",
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
+        "phpstan/phpstan": "^1.12|^2.0",
+        "laravel/pint": "^1.13"
     },
     "autoload": {
         "psr-4": {
@@ -42,7 +44,9 @@
     },
     "scripts": {
         "test": "pest",
-        "test-coverage": "pest --coverage",
+        "test-coverage": "pest --coverage --coverage-clover coverage.xml",
+        "analyse": "phpstan analyse",
+        "format": "pint",
         "version:show": "php scripts/version.php show",
         "version:patch": "php scripts/version.php patch",
         "version:minor": "php scripts/version.php minor",
