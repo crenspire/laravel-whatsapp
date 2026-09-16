@@ -29,8 +29,8 @@ Incoming messages and delivery receipts arrive as regular Laravel events, so you
 
 ## Requirements
 
-- PHP 8.2+
-- Laravel 10, 11 or 12
+- PHP 8.2+ (8.3+ for Laravel 13)
+- Laravel 12 or 13
 - A Meta app with the WhatsApp product added ([getting started guide](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started))
 
 ## Installation
@@ -38,6 +38,8 @@ Incoming messages and delivery receipts arrive as regular Laravel events, so you
 ```bash
 composer require crenspire/laravel-whatsapp
 ```
+
+Upgrading from 2.x? See [UPGRADE.md](UPGRADE.md). For Laravel 10 or 11, use version 2.x.
 
 The service provider and `Whatsapp` facade are registered automatically. Publish the config file if you want to change the defaults:
 
@@ -439,4 +441,4 @@ If you find a security issue, please email akshay.joshi@crenspire.com instead of
 
 ## License
 
-Released under the MIT License.
+MIT. See [LICENSE.md](LICENSE.md).

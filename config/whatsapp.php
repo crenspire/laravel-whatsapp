@@ -18,7 +18,7 @@ return [
     'default_headers' => [
         'Content-Type' => 'application/json',
         'Accept' => 'application/json',
-        'User-Agent' => 'Laravel-WhatsApp-Package/1.0.0',
+        'User-Agent' => 'Laravel-WhatsApp-Package/3.0.0',
     ],
 
     // Default template language (Meta language code, e.g. en_US, en, pt_BR)

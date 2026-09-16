@@ -8,7 +8,7 @@ Thank you for considering contributing to the Laravel WhatsApp package! This doc
 
 - PHP 8.2 or higher
 - Composer
-- Laravel 10.x or 11.x
+- Laravel 12 or 13
 - Git
 
 ### Fork and Clone

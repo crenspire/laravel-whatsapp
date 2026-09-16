@@ -11,9 +11,9 @@ This Laravel WhatsApp package follows the **Spatie approach** for Laravel packag
 ```json
 {
   "php": "^8.2",
-  "illuminate/contracts": "^10.0|^11.0|^12.0",
+  "illuminate/contracts": "^12.0|^13.0",
   "spatie/laravel-package-tools": "^1.14",
-  "nesbot/carbon": "^2.0|^3.0",
+  "nesbot/carbon": "^3.0",
   "guzzlehttp/guzzle": "^7.0"
 }
 ```
