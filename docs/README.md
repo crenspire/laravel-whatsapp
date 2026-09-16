@@ -25,7 +25,7 @@ composer require crenspire/laravel-whatsapp
 ### 2. Publish Configuration
 
 ```bash
-php artisan vendor:publish --tag=config --provider="Crenspire\\Whatsapp\\WhatsappServiceProvider"
+php artisan vendor:publish --tag=whatsapp-config --provider="Crenspire\\Whatsapp\\WhatsappServiceProvider"
 ```
 
 ### 3. Configure Environment Variables
@@ -40,7 +40,7 @@ WHATSAPP_ACCESS_TOKEN=your_access_token
 
 # Webhook Configuration
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_webhook_verify_token
-WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
+WHATSAPP_WEBHOOK_SECRET=your_app_secret
 
 # Optional Configuration
 WHATSAPP_RATE_LIMIT=30
@@ -170,7 +170,7 @@ Whatsapp::sendListMessage(
 ### Upload Media
 
 ```php
-$response = Whatsapp::uploadMedia('/path/to/image.jpg', 'image');
+$response = Whatsapp::uploadMedia('/path/to/image.jpg', 'image/jpeg');
 $mediaId = $response['id'];
 
 // Use the media ID to send the image
@@ -206,7 +206,7 @@ Use tenant-specific configuration:
 
 ```php
 // Send message using specific tenant
-Whatsapp::sendTextMessage('1234567890', 'Hello!', 'company1');
+Whatsapp::sendTextMessage('1234567890', 'Hello!', false, 'company1');
 ```
 
 ## Webhook Handling
@@ -317,7 +317,7 @@ The package includes comprehensive tests covering all functionality.
 The package automatically verifies webhook signatures when `WHATSAPP_WEBHOOK_SECRET` is configured:
 
 ```env
-WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
+WHATSAPP_WEBHOOK_SECRET=your_app_secret
 ```
 
 ### Phone Number Validation

@@ -24,7 +24,7 @@ WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_webhook_verify_token
 
 ```env
 # Webhook secret for signature verification (recommended for production)
-WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
+WHATSAPP_WEBHOOK_SECRET=your_app_secret
 
 # Rate limit per minute (default: 30)
 WHATSAPP_RATE_LIMIT=30
@@ -121,7 +121,7 @@ Then use tenant-specific configuration:
 Whatsapp::sendTextMessage('1234567890', 'Hello!');
 
 // Use specific tenant
-Whatsapp::sendTextMessage('1234567890', 'Hello!', 'client1');
+Whatsapp::sendTextMessage('1234567890', 'Hello!', false, 'client1');
 ```
 
 ## Rate Limiting
@@ -171,13 +171,13 @@ WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_random_string
 
 ### Webhook Security
 
-For production environments, enable webhook signature verification:
+For production environments, enable webhook signature verification by setting your Meta **App Secret** (App Dashboard → App settings → Basic):
 
 ```env
-WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
+WHATSAPP_WEBHOOK_SECRET=your_app_secret
 ```
 
-This ensures that webhook requests are actually from WhatsApp.
+This ensures that webhook requests are actually from WhatsApp. Requests with an invalid signature get a 401 response. Without a secret, requests are accepted but a warning is logged for each one.
 
 ### Webhook URLs
 
@@ -236,7 +236,7 @@ $customHeaders = [
     'X-Client-Version' => '2.0.0'
 ];
 
-Whatsapp::sendTextMessage('+1234567890', 'Hello!', null, $customHeaders);
+Whatsapp::sendTextMessage('+1234567890', 'Hello!', false, null, $customHeaders);
 ```
 
 ## Environment-specific Configuration

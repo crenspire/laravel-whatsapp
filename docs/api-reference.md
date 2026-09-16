@@ -44,7 +44,7 @@ $response = $service->sendMessage('1234567890', [
 ### sendTextMessage
 
 ```php
-public function sendTextMessage(string $to, string $text, ?string $tenantId = null, array $customHeaders = []): array
+public function sendTextMessage(string $to, string $text, bool $previewUrl = false, ?string $tenantId = null, array $customHeaders = [], ?string $language = null): array
 ```
 
 Sends a text message.
@@ -52,8 +52,10 @@ Sends a text message.
 **Parameters:**
 - `$to` (string): Recipient phone number
 - `$text` (string): Message text
+- `$previewUrl` (bool): Whether to show a preview for URLs in the text
 - `$tenantId` (string|null): Optional tenant ID
 - `$customHeaders` (array): Optional custom headers for this request
+- `$language` (string|null): Optional language override
 
 **Returns:** array - API response
 
@@ -210,21 +212,22 @@ $response = $service->sendListMessage('1234567890', 'Choose from list:', 'View O
 ### uploadMedia
 
 ```php
-public function uploadMedia(string $filePath, string $type, ?string $tenantId = null): array
+public function uploadMedia(string $filePath, string $type, ?string $tenantId = null, array $customHeaders = []): array
 ```
 
 Uploads a media file to WhatsApp.
 
 **Parameters:**
 - `$filePath` (string): Path to the file
-- `$type` (string): Media type ('image', 'video', 'document', 'audio')
+- `$type` (string): MIME type such as 'image/jpeg' or 'application/pdf'. A bare category ('image', 'document', ...) is replaced by the MIME type detected from the file
 - `$tenantId` (string|null): Optional tenant ID
+- `$customHeaders` (array): Optional custom headers for this request
 
 **Returns:** array - API response containing media ID
 
 **Example:**
 ```php
-$response = $service->uploadMedia('/path/to/image.jpg', 'image');
+$response = $service->uploadMedia('/path/to/image.jpg', 'image/jpeg');
 $mediaId = $response['id'];
 ```
 

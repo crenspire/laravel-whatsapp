@@ -37,7 +37,7 @@ composer require crenspire/laravel-whatsapp
 ### 2. Publish Configuration
 
 ```bash
-php artisan vendor:publish --tag=config --provider="Crenspire\\Whatsapp\\WhatsappServiceProvider"
+php artisan vendor:publish --tag=whatsapp-config --provider="Crenspire\\Whatsapp\\WhatsappServiceProvider"
 ```
 
 ### 3. Configure Environment Variables
@@ -49,10 +49,11 @@ Add these variables to your `.env` file:
 WHATSAPP_BASE_URI=https://graph.facebook.com/v20.0
 WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
 WHATSAPP_ACCESS_TOKEN=your_access_token
+WHATSAPP_BUSINESS_ACCOUNT_ID=your_business_account_id
 
 # Webhook Configuration
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_webhook_verify_token
-WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
+WHATSAPP_WEBHOOK_SECRET=your_app_secret
 
 # Optional Configuration
 WHATSAPP_RATE_LIMIT=30
@@ -182,7 +183,7 @@ Whatsapp::sendListMessage(
 ### Upload Media
 
 ```php
-$response = Whatsapp::uploadMedia('/path/to/image.jpg', 'image');
+$response = Whatsapp::uploadMedia('/path/to/image.jpg', 'image/jpeg');
 $mediaId = $response['id'];
 
 // Use the media ID to send the image
@@ -218,7 +219,7 @@ Use tenant-specific configuration:
 
 ```php
 // Send message using specific tenant
-Whatsapp::sendTextMessage('1234567890', 'Hello!', 'company1');
+Whatsapp::sendTextMessage('1234567890', 'Hello!', false, 'company1');
 ```
 
 ## Webhook Handling
@@ -326,11 +327,13 @@ The package includes comprehensive tests covering all functionality.
 
 ### Webhook Verification
 
-The package automatically verifies webhook signatures when `WHATSAPP_WEBHOOK_SECRET` is configured:
+The package verifies the `X-Hub-Signature-256` header of every webhook when `WHATSAPP_WEBHOOK_SECRET` is set to your Meta **App Secret** (App Dashboard → App settings → Basic):
 
 ```env
-WHATSAPP_WEBHOOK_SECRET=your_webhook_secret
+WHATSAPP_WEBHOOK_SECRET=your_app_secret
 ```
+
+Without it, anyone who knows the webhook URL can post fake events, so a warning is logged for every unsigned request.
 
 ### Phone Number Validation
 
@@ -350,10 +353,10 @@ $customHeaders = [
     'X-Custom-Auth' => 'custom_token'
 ];
 
-Whatsapp::sendTextMessage('+1234567890', 'Hello!', null, $customHeaders);
+Whatsapp::sendTextMessage('+1234567890', 'Hello!', false, null, $customHeaders);
 
 // Using custom headers with media upload
-Whatsapp::uploadMedia('/path/to/file.jpg', 'image', null, $customHeaders);
+Whatsapp::uploadMedia('/path/to/file.jpg', 'image/jpeg', null, $customHeaders);
 
 // Using custom headers with media download
 $filePath = Whatsapp::downloadMedia('media_id_123', null, $customHeaders);
@@ -438,7 +441,6 @@ Use the new builder patterns for cleaner code:
 $template = Whatsapp::template('welcome_template', 'en_US')
     ->header([['type' => 'text', 'text' => 'Welcome!']])
     ->body([['type' => 'text', 'text' => 'Hello {{1}}!']])
-    ->footer([['type' => 'text', 'text' => 'Thank you']])
     ->build();
 
 // Message builder
@@ -466,6 +468,62 @@ $info = Whatsapp::getMediaInfo('media_id_123');
 
 // Delete media
 Whatsapp::deleteMedia('media_id_123');
+```
+
+### Template Management
+
+Create, edit, delete, and check the status of message templates. Templates are submitted for review automatically when created or edited:
+
+```php
+// Create a new template
+$components = [
+    [
+        'type' => 'HEADER',
+        'format' => 'TEXT',
+        'text' => 'Order Confirmation'
+    ],
+    [
+        'type' => 'BODY',
+        'text' => 'Hi {{1}}, your order {{2}} has been confirmed.'
+    ],
+    [
+        'type' => 'FOOTER',
+        'text' => 'Thank you for shopping with us!'
+    ]
+];
+
+$result = Whatsapp::createTemplate(
+    'order_confirmation',
+    'en_US',
+    'UTILITY',
+    $components
+);
+
+// Update an existing template
+$result = Whatsapp::updateTemplate(
+    'order_confirmation',
+    'en_US',
+    'UTILITY',
+    $updatedComponents
+);
+
+// Get all templates
+$templates = Whatsapp::getTemplates();
+
+// Get templates by status
+$approvedTemplates = Whatsapp::getTemplatesByStatus('APPROVED');
+$pendingTemplates = Whatsapp::getTemplatesByStatus('PENDING');
+
+// Get templates by category
+$utilityTemplates = Whatsapp::getTemplatesByCategory('UTILITY');
+$marketingTemplates = Whatsapp::getTemplatesByCategory('MARKETING');
+
+// Check template status
+$status = Whatsapp::getTemplateStatus('order_confirmation');
+$isApproved = Whatsapp::isTemplateApproved('order_confirmation');
+
+// Delete template
+$deleted = Whatsapp::deleteTemplate('old_template');
 ```
 
 ## Examples

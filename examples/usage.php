@@ -20,7 +20,6 @@ $message = Whatsapp::message()::text('Hello with preview!', true);
 $template = Whatsapp::template('welcome_template', 'en_US')
     ->header([['type' => 'text', 'text' => 'Welcome!']])
     ->body([['type' => 'text', 'text' => 'Hello {{1}}!']])
-    ->footer([['type' => 'text', 'text' => 'Thank you']])
     ->build();
 
 // Example 4: Media message
@@ -87,10 +86,10 @@ $productSections = [
         ]
     ]
 ];
-Whatsapp::sendMultiProductMessage('+1234567890', 'catalog_id', 'Browse Products', $productSections);
+Whatsapp::sendMultiProductMessage('+1234567890', 'catalog_id', 'Browse Products', $productSections, 'Our Products');
 
 // Example 14: Media management
-$uploadResult = Whatsapp::uploadMedia('/path/to/image.jpg', 'image');
+$uploadResult = Whatsapp::uploadMedia('/path/to/image.jpg', 'image/jpeg');
 $mediaId = $uploadResult['id'];
 
 $mediaInfo = Whatsapp::getMediaInfo($mediaId);
@@ -114,4 +113,4 @@ Whatsapp::sendTextMessage('+1234567890', 'Hello from tenant!', false, 'tenant1')
 Whatsapp::sendTextMessage('+1234567890', 'Hello!', false, null, ['X-Custom-Header' => 'value']);
 
 // Example 19: Language override
-Whatsapp::sendTextMessage('+1234567890', 'Hola!', false, null, [], 'es-ES');
+Whatsapp::sendTextMessage('+1234567890', 'Hola!', false, null, [], 'es_ES');

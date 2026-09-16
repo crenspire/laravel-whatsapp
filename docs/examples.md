@@ -201,7 +201,7 @@ class ProductController extends Controller
         
         try {
             // Upload media to WhatsApp
-            $uploadResponse = Whatsapp::uploadMedia($imagePath, 'image');
+            $uploadResponse = Whatsapp::uploadMedia($imagePath, 'image/jpeg');
             $mediaId = $uploadResponse['id'];
             
             // Send the image with caption
@@ -244,7 +244,7 @@ class DocumentController extends Controller
         
         try {
             // Upload PDF to WhatsApp
-            $uploadResponse = Whatsapp::uploadMedia($pdfPath, 'document');
+            $uploadResponse = Whatsapp::uploadMedia($pdfPath, 'application/pdf');
             $mediaId = $uploadResponse['id'];
             
             // Send the invoice
@@ -507,7 +507,7 @@ class MultiTenantController extends Controller
     {
         try {
             // Use tenant-specific configuration
-            $response = Whatsapp::sendTextMessage($phoneNumber, $message, $tenantId);
+            $response = Whatsapp::sendTextMessage($phoneNumber, $message, false, $tenantId);
             
             return response()->json([
                 'success' => true,
@@ -549,7 +549,7 @@ class TenantController extends Controller
         // Test the configuration
         try {
             $service = app(WhatsappService::class);
-            $service->sendTextMessage('1234567890', 'Test message', $tenantId);
+            $service->sendTextMessage('1234567890', 'Test message', false, $tenantId);
             
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
